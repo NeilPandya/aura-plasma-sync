@@ -35,13 +35,17 @@ It watches `kdeglobals` for changes, extracts the accent color, and updates the 
 ---
 
 ## Prerequisites
+
 - **KDE Plasma 6** with the `kreadconfig6` CLI tool available.
-- **asusctl** – the utility that controls Asus Aura devices.  
-  The project has been tested with **`asusctl v6.3.2`** (any newer version should also work).  
+
+- [**asusctl**](https://gitlab.com/asus-linux/asusctl) – the utility that controls Asus Aura devices.
+  The project has been tested with **`asusctl v6.3.2`** (any newer version should also work on the assumption that static coloreffects follow the same syntax).
+
   The required syntax is:  
 ```sh
 asusctl aura effect static -c <hex-color>
 ```
+
 - Optional but recommended: `systemd` (user‑level) for running the service.
 
 Utility also uses the following Rust crates (declared in `Cargo.toml`):
