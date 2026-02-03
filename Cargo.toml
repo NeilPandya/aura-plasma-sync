@@ -1,0 +1,23 @@
+[package]
+name = "aura-plasma-sync"
+version = "0.1.0"
+edition = "2024"
+authors = ["Neil Pandya <dev@neilpandya.com>"]
+description = "KDE-native utility to sync Asus Aura lighting with Plasma accent colors."
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# For watching kdeglobals for changes
+notify = "8.0.0"
+# For flexible error handling
+anyhow = "1.0.95"
+# CLI arguments for install/uninstall/run
+clap = { version = "4.5.23", features = ["derive"] }
+# Native KDE System Tray icon
+ksni = "0.2.1"
+# To check for system dependencies
+which = "7.0.0"
+# For standard logging
+log = "0.4.22"
+# For printing logs to the terminal
+env_logger = "0.11.5"
