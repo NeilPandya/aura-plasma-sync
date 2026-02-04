@@ -38,7 +38,7 @@ A lightweight utility that synchronizes **Asus Aura** lighting with your desktop
 
 - **Rust**: Installed via [rustup](https://rust-lang.github.io/rustup/) (required for building from source)
 - **Asus Hardware**: Device with Aura RGB lighting supported by `asusctl`
-- **asusctl**: The utility that controls Asus Aura devices (tested with v6.3.2+)
+- [**asusctl**](https://gitlab.com/asus-linux/asusctl): The utility that controls Asus Aura devices (tested with v6.3.2+)
 ```bash
 asusctl aura effect static -c <hex-color>
 ```
