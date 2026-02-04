@@ -1,14 +1,11 @@
+// src/env_check.rs
+
 use anyhow::{Context, Result, anyhow};
 use which::which;
 
 pub fn validate_dependencies() -> Result<()> {
-    let deps = [
-        ("asusctl", "asusctl not found - please install asusctl"),
-        (
-            "kreadconfig6",
-            "kreadconfig6 not found - requires KDE Plasma 6",
-        ),
-    ];
+    // Essential dependencies for XDG accent color syncing
+    let deps = [("asusctl", "asusctl not found - please install asusctl")];
 
     for (cmd, msg) in &deps {
         which(cmd)
@@ -16,7 +13,7 @@ pub fn validate_dependencies() -> Result<()> {
             .context(format!("Dependency check failed for '{}'", cmd))?;
     }
 
-    // Additional validation for asusctl version (make it non-fatal)
+    // Non-fatal validation for asusctl version
     if let Err(e) = validate_asusctl_version() {
         log::warn!("Could not verify asusctl version: {}", e);
     }
