@@ -1,12 +1,14 @@
-use anyhow::{Result, bail};
+// src/executor.rs
+
+use anyhow::{Context, Result, bail};
 use std::process::Command;
 
-/// Interfaces with the hardware via asusctl
+/// Interfaces with Asus hardware via asusctl
 pub fn set_aura_color(hex: &str) -> Result<()> {
-    // Correct command for modern asusctl
     let status = Command::new("asusctl")
         .args(["aura", "effect", "static", "-c", hex])
-        .status()?;
+        .status()
+        .context("Failed to execute asusctl command")?;
 
     if !status.success() {
         bail!(
