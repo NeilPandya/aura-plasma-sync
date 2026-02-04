@@ -2,6 +2,7 @@ mod app;
 mod env_check;
 mod executor;
 mod installer;
+mod portal;
 mod tray;
 
 use anyhow::Result;
