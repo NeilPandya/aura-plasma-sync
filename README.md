@@ -1,7 +1,7 @@
 # aura-plasma-sync
 
 A lightweight KDE‑native system tray utility that synchronizes **Asus Aura** lighting with the current **Plasma accent color**.  
-It watches `kdeglobals` for changes, extracts the accent color, and updates the connected Aura device via the `asusctl` binary.  
+It listens for **DBus signals** from the XDG Settings Portal for instantaneous updates, with a fallback to `kdeglobals` via `kreadconfig6`.
 
 ---
 
@@ -23,37 +23,38 @@ It watches `kdeglobals` for changes, extracts the accent color, and updates the 
 ---
 
 ## Features
-- **Real‑time sync**: Monitors `kdeglobals` for accent‑color changes with a short debounce.
-- **Multiple color sources**:
-  1. Directly from the `AccentColor` entry in `kdeglobals`.
-  2. Fallback to `Colors:Selection` → `BackgroundNormal` if `AccentColor` is missing.
-  3. If neither is present, the utility gracefully exits with an informative error.
-- **Systemd user service**: Installs a persistent background service that starts on login.
-- **Tray integration**: Shows a status icon in the Plasma system tray with a toggle to enable/disable syncing.
-- **Clear error handling**: All failures surface via the system log (`log::error`) and conventional exit codes.
+- **Real‑time DBus Sync**: Listen for `SettingChanged` signals from `org.freedesktop.portal.Settings`. Updates are instantaneous with zero filesystem polling overhead.
+- **Fast-Path Extraction**: Directly parses RGB double-precision values from the DBus payload, avoiding external process spawns for most updates.
+- **Robust Fallbacks**: 
+  1. Primary: Direct DBus signal payload.
+  2. Secondary: `General` → `AccentColor` in `kdeglobals`.
+  3. Tertiary: `Colors:Selection` → `BackgroundNormal` in `kdeglobals`.
+- **Systemd user service**: Includes an installer to run the utility as a persistent background service.
+- **Tray integration**: Provides a native Plasma system tray icon with a toggle to enable/disable synchronization.
 
 ---
 
 ## Prerequisites
 
-- **KDE Plasma 6** with the `kreadconfig6` CLI tool available.
-
+- **KDE Plasma 6** (ensure `kreadconfig6` is installed).
+- **xdg-desktop-portal-kde** (standard in Plasma 6 for DBus signals).
 - [**asusctl**](https://gitlab.com/asus-linux/asusctl) – the utility that controls Asus Aura devices.
-  The project has been tested with **`asusctl v6.3.2`** (any newer version should also work on the assumption that static coloreffects follow the same syntax).
+  The project has been tested with **`asusctl v6.3.2`**.
 
   The required syntax is:  
-```sh
+```bash
 asusctl aura effect static -c <hex-color>
 ```
 
 - Optional but recommended: `systemd` (user‑level) for running the service.
 
-Utility also uses the following Rust crates (declared in `Cargo.toml`):
-- `anyhow` – error handling.
-- `clap` – command‑line parsing.
-- `notify` – filesystem watching.
-- `which` – binary existence checks.
-- `log` / `env_logger` – logging.
+Utility dependencies (Rust crates):
+- `zbus` – DBus communication (XDG Settings Portal).
+- `anyhow` – Error handling.
+- `clap` – Command‑line arguments.
+- `ksni` – Native KDE System Tray integration.
+- `which` – Dependency validation.
+- `log` / `env_logger` – Logging.)
 
 ---
 
@@ -131,9 +132,6 @@ cargo clippy -- -D warnings
 ```bash
 cargo build --release
 ```
-
-### Testing
-The project contains no unit tests yet, but you can add them under `src/` as `tests/` or `#[cfg(test)]` modules later. CI pipelines (e.g., GitHub Actions) can be set up to run `cargo fmt`, `cargo clippy`, and `cargo test` on every push.
 
 ---
 
