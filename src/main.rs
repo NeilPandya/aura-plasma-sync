@@ -40,14 +40,13 @@ fn run_application() -> Result<()> {
     let active = Arc::new(AtomicBool::new(true));
     let (control_tx, control_rx) = mpsc::channel();
 
-    let tray = tray::AuraTray::new(Arc::clone(&active), control_tx);
+    let tray = tray::AuraTray::new(Arc::clone(&active), control_tx.clone());
     let service = ksni::TrayService::new(tray);
 
     let sync_app = app::AuraSyncApp::new(active);
 
-    // Properly handle thread startup
     sync_app
-        .start_sync_thread(control_rx)
+        .start_sync_thread(control_rx, control_tx)
         .map_err(|e| anyhow::anyhow!("Failed to start sync thread: {e}"))?;
 
     service

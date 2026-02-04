@@ -1,19 +1,30 @@
 use anyhow::{Context, Result, anyhow, bail};
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Receiver;
-use std::{thread, time::Duration};
+use std::sync::mpsc::{Receiver, Sender};
+use std::thread;
 
 use crate::executor;
 
-const KDEG_FILE: &str = "kdeglobals";
-const SETTLE_MS: u64 = 250;
-
 pub enum ControlMsg {
     TriggerSync,
+    UpdateColor(String),
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.portal.Settings",
+    default_service = "org.freedesktop.portal.Desktop",
+    default_path = "/org/freedesktop/portal/desktop"
+)]
+trait Settings {
+    #[zbus(signal)]
+    fn setting_changed(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: zbus::zvariant::Value<'_>,
+    ) -> zbus::Result<()>;
 }
 
 pub struct AuraSyncApp {
@@ -29,27 +40,31 @@ impl AuraSyncApp {
         }
     }
 
-    pub fn start_sync_thread(mut self, control_rx: Receiver<ControlMsg>) -> Result<()> {
-        let config_dir = get_config_dir()?;
-        if let Err(e) = self.sync() {
+    pub fn start_sync_thread(
+        mut self,
+        control_rx: Receiver<ControlMsg>,
+        control_tx: Sender<ControlMsg>,
+    ) -> Result<()> {
+        // Perform initial sync
+        if let Err(e) = self.sync(None) {
             log::warn!("Initial sync failed: {}", e);
         }
 
+        let dbus_tx = control_tx.clone();
         thread::spawn(move || {
-            let (tx, rx) = std::sync::mpsc::channel();
+            if let Err(e) = listen_for_dbus_changes(dbus_tx) {
+                log::error!("DBus listener failed: {}", e);
+            }
+        });
 
-            match RecommendedWatcher::new(tx, Config::default()) {
-                Ok(mut watcher) => {
-                    if let Err(e) = watcher.watch(&config_dir, RecursiveMode::NonRecursive) {
-                        log::error!("Failed to watch config directory: {}", e);
-                        return;
-                    }
-
-                    // Event processing loop
-                    self.event_loop(control_rx, rx);
-                }
-                Err(e) => {
-                    log::error!("Failed to create file watcher: {}", e);
+        thread::spawn(move || {
+            for msg in control_rx {
+                let result = match msg {
+                    ControlMsg::TriggerSync => self.sync(None),
+                    ControlMsg::UpdateColor(hex) => self.sync(Some(hex)),
+                };
+                if let Err(e) = result {
+                    log::error!("Sync operation failed: {}", e);
                 }
             }
         });
@@ -57,48 +72,16 @@ impl AuraSyncApp {
         Ok(())
     }
 
-    fn event_loop(
-        mut self,
-        control_rx: Receiver<ControlMsg>,
-        file_rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>,
-    ) {
-        loop {
-            // Handle control messages
-            while let Ok(ControlMsg::TriggerSync) = control_rx.try_recv() {
-                if let Err(e) = self.sync() {
-                    log::error!("Sync triggered by control message failed: {}", e);
-                }
-            }
-
-            // Handle filesystem events with timeout
-            match file_rx.recv_timeout(Duration::from_millis(500)) {
-                Ok(Ok(event)) => {
-                    let is_target = event
-                        .paths
-                        .iter()
-                        .any(|p| p.file_name().map_or(false, |n| n == KDEG_FILE));
-
-                    if is_target && (event.kind.is_modify() || event.kind.is_create()) {
-                        thread::sleep(Duration::from_millis(SETTLE_MS));
-                        while file_rx.try_recv().is_ok() {}
-                        if let Err(e) = self.sync() {
-                            log::error!("File event sync failed: {}", e);
-                        }
-                    }
-                }
-                // If the watcher channel is disconnected, exit the thread
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-                _ => {}
-            }
-        }
-    }
-
-    fn sync(&mut self) -> Result<()> {
+    fn sync(&mut self, direct_hex: Option<String>) -> Result<()> {
         if !self.active.load(Ordering::Relaxed) {
             return Ok(());
         }
 
-        let hex = self.fetch_kde_accent()?;
+        let hex = match direct_hex {
+            Some(h) => h,
+            None => self.fetch_kde_accent()?,
+        };
+
         if hex != self.last_hex {
             executor::set_aura_color(&hex)?;
             self.last_hex = hex;
@@ -107,10 +90,15 @@ impl AuraSyncApp {
     }
 
     fn fetch_kde_accent(&self) -> Result<String> {
+        // Lazy evaluation: only shell out for the fallback if the primary is missing
         let raw = self
             .read_config("General", "AccentColor")?
-            .or(self.read_config("Colors:Selection", "BackgroundNormal")?)
-            .ok_or_else(|| anyhow!("Accent color not found"))?;
+            .or_else(|| {
+                self.read_config("Colors:Selection", "BackgroundNormal")
+                    .ok()
+                    .flatten()
+            })
+            .ok_or_else(|| anyhow!("Accent color not found in kdeglobals"))?;
 
         let rgb: Vec<u8> = raw
             .split(',')
@@ -134,9 +122,44 @@ impl AuraSyncApp {
     }
 }
 
-fn get_config_dir() -> Result<PathBuf> {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
-        .context("Missing HOME/XDG_CONFIG_HOME")
+fn listen_for_dbus_changes(tx: Sender<ControlMsg>) -> Result<()> {
+    use zbus::zvariant::Value;
+
+    let conn = zbus::blocking::Connection::session()?;
+    let proxy = SettingsProxyBlocking::new(&conn)?;
+    let signals = proxy.receive_setting_changed()?;
+
+    for signal in signals {
+        if let Ok(args) = signal.args() {
+            let namespace = *args.namespace();
+            let key = *args.key();
+
+            if namespace == "org.freedesktop.appearance" {
+                if key == "accent-color" {
+                    // Peek into the Variant (Value::Value) to find the Tuple (Value::Structure)
+                    if let Value::Value(inner) = args.value() {
+                        if let Value::Structure(s) = &**inner {
+                            let f = s.fields();
+                            if f.len() == 3 {
+                                // Match the three doubles (Value::F64)
+                                if let (Value::F64(r), Value::F64(g), Value::F64(b)) =
+                                    (&f[0], &f[1], &f[2])
+                                {
+                                    let r = (r * 255.0).round() as u8;
+                                    let g = (g * 255.0).round() as u8;
+                                    let b = (b * 255.0).round() as u8;
+                                    let hex = format!("{:02x}{:02x}{:02x}", r, g, b);
+                                    let _ = tx.send(ControlMsg::UpdateColor(hex));
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+                // Fallback: trigger a full re-read if the fast-path fails
+                let _ = tx.send(ControlMsg::TriggerSync);
+            }
+        }
+    }
+    Ok(())
 }
