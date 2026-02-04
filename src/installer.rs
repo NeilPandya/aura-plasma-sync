@@ -31,15 +31,17 @@ fn systemctl_user(args: &[&str]) -> Result<()> {
 pub fn install() -> Result<()> {
     let service_path = get_service_path()?;
     let current_exe = std::env::current_exe()?;
+    let description = env!("CARGO_PKG_DESCRIPTION");
 
     if let Some(parent) = service_path.parent() {
         fs::create_dir_all(parent)?;
     }
 
     let content = format!(
-        "[Unit]\nDescription=Asus Aura Plasma Sync\nAfter=graphical-session.target\n\n\
+        "[Unit]\nDescription={}\nAfter=graphical-session.target\n\n\
         [Service]\nExecStart={}\nRestart=always\n\n\
         [Install]\nWantedBy=graphical-session.target",
+        description,
         current_exe.display()
     );
 
