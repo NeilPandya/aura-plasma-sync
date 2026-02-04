@@ -1,7 +1,6 @@
-# aura-plasma-sync
+# aura-accent-sync
 
-A lightweight KDE‑native system tray utility that synchronizes **Asus Aura** lighting with the current **Plasma accent color**.  
-It listens for **DBus signals** from the XDG Settings Portal for instantaneous updates, with a fallback to `kdeglobals` via `kreadconfig6`.
+A lightweight utility that synchronizes **Asus Aura** lighting with your desktop environment's accent color via the **XDG Settings Portal** standard.
 
 ---
 
@@ -9,10 +8,9 @@ It listens for **DBus signals** from the XDG Settings Portal for instantaneous u
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-  - [Manual Build & Install](#manual-build--install)
   - [Systemd Service (Recommended)](#systemd-service-recommended)
+  - [Manual Build & Install](#manual-build--install)
 - [Usage](#usage)
-- [Configuration & Customization](#configuration--customization)
 - [Development](#development)
   - [Running Checks](#running-checks)
   - [Building](#building)
@@ -23,51 +21,42 @@ It listens for **DBus signals** from the XDG Settings Portal for instantaneous u
 ---
 
 ## Features
-- **Real‑time DBus Sync**: Listen for `SettingChanged` signals from `org.freedesktop.portal.Settings`. Updates are instantaneous with zero filesystem polling overhead.
-- **Fast-Path Extraction**: Directly parses RGB double-precision values from the DBus payload, avoiding external process spawns for most updates.
-- **Robust Fallbacks**: 
-  1. Primary: Direct DBus signal payload for `accent-color`.
-  2. Secondary: `General` → `AccentColor` from `kdeglobals` (via `kreadconfig6`).
-  3. Tertiary: `Colors:Selection` → `BackgroundNormal` from `kdeglobals` (via `kreadconfig6`).
-- **Systemd user service**: Includes an installer to run the utility as a persistent background service.
-- **Tray integration**: Provides a native Plasma system tray icon with a toggle to enable/disable synchronization.
+- **Pure XDG Compliance**: Uses only the `org.freedesktop.portal.Settings` interface for accent color detection
+- **Real-time Updates**: Listens for `SettingChanged` signals for instant color synchronization
+- **Cross-Desktop Compatibility**: Works with any XDG-compatible desktop environment including:
+  - GNOME 47+
+  - KDE Plasma 5.24+
+  - Cosmic (System76)
+  - Pantheon (elementary OS)
+  - And any other DE that implements the XDG Settings Portal
+- **Systemd Integration**: Includes an installer for persistent background service
+- **Tray Integration**: Provides a system tray icon with toggle functionality
 
 ---
 
 ## Prerequisites
 
-- **KDE Plasma 6** (ensure `kreadconfig6` is installed for fallback functionality).
-- **xdg-desktop-portal-kde** (standard in Plasma 6 for DBus signals).
-- [**asusctl**](https://gitlab.com/asus-linux/asusctl) – the utility that controls Asus Aura devices.
-  The project has been tested with **`asusctl v6.3.2`**.
-
-  The required syntax is:  
+- **Rust**: Installed via [rustup](https://rust-lang.github.io/rustup/) (required for building from source)
+- **Asus Hardware**: Device with Aura RGB lighting supported by `asusctl`
+- **asusctl**: The utility that controls Asus Aura devices (tested with v6.3.2+)
 ```bash
 asusctl aura effect static -c <hex-color>
 ```
 
-- Optional but recommended: `systemd` (user‑level) for running the service.
+- **XDG Settings Portal**: Available in modern desktop environments
+- **systemd** (user-level): For running the service (recommended)
 
-Utility dependencies (Rust crates):
-- `zbus` – DBus communication (XDG Settings Portal).
-- `anyhow` – Flexible error handling.
-- `clap` – Command‑line argument parsing.
-- `ksni` – Native KDE System Tray integration.
-- `which` – Binary existence checks.
-- `log` / `env_logger` – Standard logging.
+Required Rust crates:
+- `zbus` – DBus communication with XDG Portal
+- `anyhow` – Error handling
+- `clap` – Command-line parsing
+- `tray-icon` – Cross-platform system tray
+- `which` – Dependency validation
+- `log` / `env_logger` – Logging
 
 ---
 
 ## Installation
-
-### Manual Build & Install
-```bash
-git clone https://github.com/neilpandya/aura-plasma-sync
-cd aura-plasma-sync
-cargo build --release
-# The binary will be at target/release/aura-plasma-sync
-sudo cp target/release/aura-plasma-sync /usr/local/bin/
-```
 
 ### Systemd Service (Recommended)
 The project ships an installer that creates a **user‑level systemd service** pointing to the binary you just built.
@@ -83,38 +72,33 @@ The installer:
 3. Reloads the systemd daemon.
 4. Enables and starts the service immediately.
 
-To verify it’s running:
+To verify:
 ```bash
 systemctl --user status aura-plasma-sync.service
 ```
 
+### Manual Build & Install
+```bash
+git clone https://github.com/neilpandya/aura-accent-sync
+cd aura-accent-sync
+cargo build --release
+sudo cp target/release/aura-accent-sync /usr/local/bin/
+```
+
 To stop or disable later:
 ```bash
-aura-plasma-sync uninstall
+aura-accent-sync uninstall
 ```
 
 ---
 
-## Usage
-When the service is running, a tray icon appears in the Plasma panel.
-
-- **Active** (green check‑mark) – the sync thread is alive and listening for changes.
-- **Inactive** (gray icon) – syncing is paused; you can toggle it via the tray menu entry **“Sync Enabled” / “Sync Disabled”**.
-
+Usage
 The utility works in the background; you do not need to interact with it directly unless you wish to change the toggle.
 
----
+When the service is running, a tray icon appears in your desktop panel.
 
-## Configuration & Customization
-The program does **not** require any external configuration files.  
-All behavior is driven by the presence of keys in `kdeglobals`:
-
-| Key/Group                     | Purpose |
-|-------------------------------|---------|
-| `General → AccentColor`       | Primary source for the accent color. |
-| `Colors:Selection → BackgroundNormal` | Fallback source if `AccentColor` is absent. |
-
-If neither key exists, the program exits with a clear error message explaining that an accent color could not be determined.
+- **Active** (colored icon) – the sync thread is alive and listening for changes.
+- **Inactive** (gray icon) – syncing is paused; you can toggle it via the tray menu entry **"Toggle Sync"**.
 
 ---
 
@@ -154,4 +138,4 @@ Contributions are welcome! Please:
 
 ---
 
-*Enjoy a perfectly synced glow between your Asus hardware and KDE Plasma!*
+*Enjoy a perfectly synced glow between your Asus hardware and your Desktop Environment!*
