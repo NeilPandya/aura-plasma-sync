@@ -1,5 +1,4 @@
-use anyhow::{Context, Result, anyhow};
-use std::process::Command;
+use anyhow::Result;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -15,13 +14,15 @@ pub enum ControlMsg {
 pub struct AuraSyncApp {
     last_hex: String,
     active: Arc<AtomicBool>,
+    tray_updater: Option<Sender<String>>, // For sending color updates to tray
 }
 
 impl AuraSyncApp {
-    pub fn new(active: Arc<AtomicBool>) -> Self {
+    pub fn new(active: Arc<AtomicBool>, tray_updater: Option<Sender<String>>) -> Self {
         Self {
             last_hex: String::new(),
             active,
+            tray_updater,
         }
     }
 
@@ -30,8 +31,12 @@ impl AuraSyncApp {
         control_rx: Receiver<ControlMsg>,
         control_tx: Sender<ControlMsg>,
     ) -> Result<()> {
-        let _ = self.sync(None);
+        // Initial sync only via XDG portal
+        if let Err(e) = self.sync_via_portal() {
+            log::warn!("Initial sync failed: {}", e);
+        }
 
+        // Start DBus listener thread
         let dbus_tx = control_tx.clone();
         thread::spawn(move || {
             if let Err(e) = portal::listen(dbus_tx) {
@@ -39,14 +44,20 @@ impl AuraSyncApp {
             }
         });
 
+        // Start control message handler thread
         thread::spawn(move || {
             for msg in control_rx {
-                let res = match msg {
-                    ControlMsg::TriggerSync => self.sync(None),
-                    ControlMsg::UpdateColor(hex) => self.sync(Some(hex)),
-                };
-                if let Err(e) = res {
-                    log::error!("Sync failed: {}", e);
+                match msg {
+                    ControlMsg::TriggerSync => {
+                        if let Err(e) = self.sync_via_portal() {
+                            log::error!("Sync failed: {}", e);
+                        }
+                    }
+                    ControlMsg::UpdateColor(hex) => {
+                        if let Err(e) = self.update_hardware(&hex) {
+                            log::error!("Hardware update failed: {}", e);
+                        }
+                    }
                 }
             }
         });
@@ -54,51 +65,26 @@ impl AuraSyncApp {
         Ok(())
     }
 
-    fn sync(&mut self, direct_hex: Option<String>) -> Result<()> {
+    fn sync_via_portal(&mut self) -> Result<()> {
         if !self.active.load(Ordering::Relaxed) {
             return Ok(());
         }
 
-        let hex = match direct_hex {
-            Some(h) => h,
-            None => self.fetch_kde_accent()?,
-        };
-
-        if hex != self.last_hex {
-            executor::set_aura_color(&hex)?;
-            self.last_hex = hex;
+        if let Some(hex) = portal::get_current_accent_color() {
+            self.update_hardware(&hex)?;
         }
         Ok(())
     }
 
-    fn fetch_kde_accent(&self) -> Result<String> {
-        let raw = self
-            .read_config("General", "AccentColor")?
-            .or_else(|| {
-                self.read_config("Colors:Selection", "BackgroundNormal")
-                    .ok()
-                    .flatten()
-            })
-            .ok_or_else(|| anyhow!("No accent color found"))?;
+    fn update_hardware(&mut self, hex: &str) -> Result<()> {
+        if hex != self.last_hex {
+            executor::set_aura_color(hex)?;
+            self.last_hex = hex.to_string();
 
-        let rgb: Vec<u8> = raw
-            .split(',')
-            .take(3)
-            .map(|s| s.parse::<u8>().context("RGB parse error"))
-            .collect::<Result<Vec<_>>>()?;
-
-        if rgb.len() < 3 {
-            anyhow::bail!("Incomplete RGB data");
+            if let Some(ref updater) = self.tray_updater {
+                let _ = updater.send(hex.to_string());
+            }
         }
-        Ok(format!("{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]))
-    }
-
-    fn read_config(&self, group: &str, key: &str) -> Result<Option<String>> {
-        let output = Command::new("kreadconfig6")
-            .args(["--group", group, "--key", key])
-            .output()?;
-
-        let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        Ok(if val.is_empty() { None } else { Some(val) })
+        Ok(())
     }
 }
