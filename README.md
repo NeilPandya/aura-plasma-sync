@@ -26,9 +26,9 @@ It listens for **DBus signals** from the XDG Settings Portal for instantaneous u
 - **Real‑time DBus Sync**: Listen for `SettingChanged` signals from `org.freedesktop.portal.Settings`. Updates are instantaneous with zero filesystem polling overhead.
 - **Fast-Path Extraction**: Directly parses RGB double-precision values from the DBus payload, avoiding external process spawns for most updates.
 - **Robust Fallbacks**: 
-  1. Primary: Direct DBus signal payload.
-  2. Secondary: `General` → `AccentColor` in `kdeglobals`.
-  3. Tertiary: `Colors:Selection` → `BackgroundNormal` in `kdeglobals`.
+  1. Primary: Direct DBus signal payload for `accent-color`.
+  2. Secondary: `General` → `AccentColor` from `kdeglobals` (via `kreadconfig6`).
+  3. Tertiary: `Colors:Selection` → `BackgroundNormal` from `kdeglobals` (via `kreadconfig6`).
 - **Systemd user service**: Includes an installer to run the utility as a persistent background service.
 - **Tray integration**: Provides a native Plasma system tray icon with a toggle to enable/disable synchronization.
 
@@ -36,7 +36,7 @@ It listens for **DBus signals** from the XDG Settings Portal for instantaneous u
 
 ## Prerequisites
 
-- **KDE Plasma 6** (ensure `kreadconfig6` is installed).
+- **KDE Plasma 6** (ensure `kreadconfig6` is installed for fallback functionality).
 - **xdg-desktop-portal-kde** (standard in Plasma 6 for DBus signals).
 - [**asusctl**](https://gitlab.com/asus-linux/asusctl) – the utility that controls Asus Aura devices.
   The project has been tested with **`asusctl v6.3.2`**.
@@ -50,11 +50,11 @@ asusctl aura effect static -c <hex-color>
 
 Utility dependencies (Rust crates):
 - `zbus` – DBus communication (XDG Settings Portal).
-- `anyhow` – Error handling.
-- `clap` – Command‑line arguments.
+- `anyhow` – Flexible error handling.
+- `clap` – Command‑line argument parsing.
 - `ksni` – Native KDE System Tray integration.
-- `which` – Dependency validation.
-- `log` / `env_logger` – Logging.)
+- `which` – Binary existence checks.
+- `log` / `env_logger` – Standard logging.
 
 ---
 
@@ -84,13 +84,11 @@ The installer:
 4. Enables and starts the service immediately.
 
 To verify it’s running:
-
 ```bash
 systemctl --user status aura-plasma-sync.service
 ```
 
 To stop or disable later:
-
 ```bash
 aura-plasma-sync uninstall
 ```
@@ -132,6 +130,9 @@ cargo clippy -- -D warnings
 ```bash
 cargo build --release
 ```
+
+### Testing
+The project contains no unit tests yet, but you can add them under `src/` as `tests/` or `#[cfg(test)]` modules later. CI pipelines (e.g., GitHub Actions) can be set up to run `cargo fmt`, `cargo clippy`, and `cargo test` on every push.
 
 ---
 
