@@ -1,9 +1,12 @@
+// src/installer.rs
+
 use anyhow::{Context, Result, anyhow};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-const SERVICE_NAME: &str = "aura-plasma-sync.service";
+// Use generic name for XDG compatibility
+const SERVICE_NAME: &str = "aura-accent-sync.service";
 
 fn get_service_path() -> Result<PathBuf> {
     let config_dir = std::env::var_os("XDG_CONFIG_HOME")
