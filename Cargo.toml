@@ -1,23 +1,30 @@
 [package]
-name = "aura-plasma-sync"
-version = "0.2.2"
+name = "aura-accent-sync"
+version = "0.3.0"
 edition = "2024"
 authors = ["Neil Pandya <dev@neilpandya.com>"]
-description = "KDE-native utility to sync Asus Aura lighting with Plasma accent colors."
+description = "A utility to sync Asus Aura lighting with your XDG-compatible desktop environment's accent color."
 license = "GPL-3.0-or-later"
 
 [dependencies]
+gtk = "0.16"
 # For DBus communication with the XDG Settings Portal
 zbus = { version = "4.4.0", features = ["blocking"] }
 # For flexible error handling
 anyhow = "1.0.95"
 # CLI arguments for install/uninstall/run
 clap = { version = "4.5.23", features = ["derive"] }
-# Native KDE System Tray icon
-ksni = "0.2.1"
 # To check for system dependencies
 which = "7.0.0"
 # For standard logging
 log = "0.4.22"
 # For printing logs to the terminal
 env_logger = "0.11.5"
+# Cross-platform system tray icon
+tray-icon = "0.5.0"
+# Menu support for tray icon
+menu = "0.3.0"
+# Image buffer for icon generation
+image = "0.25.0"
+# For color parsing
+hex = "0.4"
