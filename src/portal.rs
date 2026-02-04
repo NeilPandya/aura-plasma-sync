@@ -1,3 +1,5 @@
+// src/portal.rs
+
 use crate::app::ControlMsg;
 use anyhow::Result;
 use std::sync::mpsc::Sender;
@@ -11,6 +13,17 @@ use zbus::zvariant::Value;
 trait Settings {
     #[zbus(signal)]
     fn setting_changed(&self, namespace: &str, key: &str, value: Value<'_>) -> zbus::Result<()>;
+
+    fn read(&self, namespace: &str, key: &str) -> zbus::Result<zbus::zvariant::OwnedValue>;
+}
+
+pub fn get_current_accent_color() -> Option<String> {
+    let conn = zbus::blocking::Connection::session().ok()?;
+    let proxy = SettingsProxyBlocking::new(&conn).ok()?;
+    let val = proxy
+        .read("org.freedesktop.appearance", "accent-color")
+        .ok()?;
+    parse_rgb_value(&val)
 }
 
 pub fn listen(tx: Sender<ControlMsg>) -> Result<()> {
@@ -20,34 +33,32 @@ pub fn listen(tx: Sender<ControlMsg>) -> Result<()> {
 
     for signal in signals {
         let Ok(args) = signal.args() else { continue };
-        let (namespace, key) = (*args.namespace(), *args.key());
-
-        if namespace == "org.freedesktop.appearance" {
-            if key == "accent-color" {
-                if let Some(hex) = try_parse_rgb(args.value()) {
-                    let _ = tx.send(ControlMsg::UpdateColor(hex));
-                    continue;
-                }
+        if *args.namespace() == "org.freedesktop.appearance" && *args.key() == "accent-color" {
+            if let Some(hex) = parse_rgb_value(args.value()) {
+                let _ = tx.send(ControlMsg::UpdateColor(hex));
+                continue;
             }
-            let _ = tx.send(ControlMsg::TriggerSync);
         }
+        let _ = tx.send(ControlMsg::TriggerSync);
     }
     Ok(())
 }
 
-fn try_parse_rgb(value: &Value) -> Option<String> {
-    if let Value::Value(inner) = value {
-        if let Value::Structure(s) = &**inner {
-            let f = s.fields();
-            if f.len() == 3 {
-                if let (Value::F64(r), Value::F64(g), Value::F64(b)) = (&f[0], &f[1], &f[2]) {
-                    return Some(format!(
-                        "{:02x}{:02x}{:02x}",
-                        (r * 255.0).round() as u8,
-                        (g * 255.0).round() as u8,
-                        (b * 255.0).round() as u8
-                    ));
-                }
+fn parse_rgb_value(mut value: &Value) -> Option<String> {
+    while let Value::Value(inner) = value {
+        value = inner;
+    }
+
+    if let Value::Structure(s) = value {
+        let f = s.fields();
+        if f.len() == 3 {
+            if let (Value::F64(r), Value::F64(g), Value::F64(b)) = (&f[0], &f[1], &f[2]) {
+                return Some(format!(
+                    "{:02x}{:02x}{:02x}",
+                    (r * 255.0).round() as u8,
+                    (g * 255.0).round() as u8,
+                    (b * 255.0).round() as u8
+                ));
             }
         }
     }
