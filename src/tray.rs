@@ -32,9 +32,15 @@ pub fn spawn_tray(
 
         // Create menu
         let menu = Menu::new();
-        menu.append(&toggle_item);
-        menu.append(&separator);
-        menu.append(&exit_item);
+        if let Err(e) = menu.append(&toggle_item) {
+            log::warn!("Failed to append toggle item to menu: {}", e);
+        }
+        if let Err(e) = menu.append(&separator) {
+            log::warn!("Failed to append separator to menu: {}", e);
+        }
+        if let Err(e) = menu.append(&exit_item) {
+            log::warn!("Failed to append exit item to menu: {}", e);
+        }
 
         // Build tray - this might still fail but we'll handle it gracefully
         let tray_result = TrayIconBuilder::new()
@@ -98,7 +104,7 @@ fn update_tray_icon(tray: &mut tray_icon::TrayIcon, hex: &str) {
         if color.len() == 3 {
             let img = create_color_icon([color[0], color[1], color[2]]);
             let buf = img.into_vec();
-            if let Ok(rgba_icon) = tray_icon::icon::Icon::from_rgba(buf, 16, 16) {
+            if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, 16, 16) {
                 let _ = tray.set_icon(Some(rgba_icon));
             }
         }
