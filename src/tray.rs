@@ -2,47 +2,35 @@
 
 use gtk;
 use image::{ImageBuffer, Rgba};
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Receiver;
 use std::thread;
 use tray_icon::{
     TrayIconBuilder,
-    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem},
 };
 
-pub struct AuraTrayHandle; // Zero-sized type to keep the tray thread alive
-
-pub fn spawn_tray(
-    active: Arc<AtomicBool>,
-    control_tx: std::sync::mpsc::Sender<crate::app::ControlMsg>,
-    color_rx: Receiver<String>,
-) -> AuraTrayHandle {
+pub fn spawn_tray(color_rx: Receiver<String>) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        // Initialize GTK in the tray thread where it's needed
+        // Initialize GTK in the tray thread
         if let Err(e) = gtk::init() {
-            log::warn!("Failed to initialize GTK for tray: {}", e);
-            // Continue anyway - maybe tray-icon has fallbacks
+            log::error!("Failed to initialize GTK for tray: {}", e);
+            return;
         }
 
-        // Create menu items first
-        let toggle_item = MenuItem::new("Toggle Sync", true, None);
-        let separator = PredefinedMenuItem::separator();
-        let exit_item = MenuItem::new("Exit", true, None);
+        // Create menu items
+        let hex_item = MenuItem::new("HEX: #------", false, None);
+        let rgb_item = MenuItem::new("RGB: ---,---,---", false, None);
 
         // Create menu
         let menu = Menu::new();
-        if let Err(e) = menu.append(&toggle_item) {
-            log::warn!("Failed to append toggle item to menu: {}", e);
+        if let Err(e) = menu.append(&hex_item) {
+            log::warn!("Failed to append hex item to menu: {}", e);
         }
-        if let Err(e) = menu.append(&separator) {
-            log::warn!("Failed to append separator to menu: {}", e);
-        }
-        if let Err(e) = menu.append(&exit_item) {
-            log::warn!("Failed to append exit item to menu: {}", e);
+        if let Err(e) = menu.append(&rgb_item) {
+            log::warn!("Failed to append rgb item to menu: {}", e);
         }
 
-        // Build tray - this might still fail but we'll handle it gracefully
+        // Build tray
         let tray_result = TrayIconBuilder::new()
             .with_tooltip("Aura XDG-Accent Sync")
             .with_menu(Box::new(menu))
@@ -51,52 +39,37 @@ pub fn spawn_tray(
         match tray_result {
             Ok(mut tray) => {
                 log::info!("System tray icon created successfully");
-                let menu_channel = MenuEvent::receiver();
+
                 loop {
-                    // Pump GTK events so the tray icon actually appears/updates
+                    // Pump GTK events
                     while gtk::events_pending() {
                         gtk::main_iteration();
                     }
 
-                    if menu_channel
-                        .recv_timeout(std::time::Duration::from_millis(10))
-                        .is_ok()
-                    {
-                        let new_state = !active.load(std::sync::atomic::Ordering::Relaxed);
-                        active.store(new_state, std::sync::atomic::Ordering::Relaxed);
-                        if new_state {
-                            let _ = control_tx.send(crate::app::ControlMsg::TriggerSync);
-                        }
+                    // Handle color updates only
+                    if let Ok(color) = color_rx.try_recv() {
+                        update_tray_visuals(&mut tray, &hex_item, &rgb_item, &color);
                     }
 
-                    if let Ok(color) = color_rx.try_recv() {
-                        update_tray_icon(&mut tray, &color);
-                    }
                     std::thread::sleep(std::time::Duration::from_millis(20));
                 }
             }
 
             Err(e) => {
-                log::warn!(
-                    "Failed to create system tray icon: {}. Continuing without tray.",
-                    e
-                );
-
-                // Event loop without tray - just handle color updates
-                loop {
-                    if let Ok(color) = color_rx.try_recv() {
-                        log::debug!("Color update received: {}", color);
-                        // Process color updates even without tray
-                        let _ = control_tx.send(crate::app::ControlMsg::UpdateColor(color));
-                    }
-
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
+                log::error!("Failed to create system tray icon: {}", e);
             }
         }
-    });
+    })
+}
 
-    AuraTrayHandle
+fn update_tray_visuals(
+    tray: &mut tray_icon::TrayIcon,
+    hex_item: &MenuItem,
+    rgb_item: &MenuItem,
+    hex: &str,
+) {
+    update_tray_icon(tray, hex);
+    update_color_display(hex_item, rgb_item, hex);
 }
 
 fn update_tray_icon(tray: &mut tray_icon::TrayIcon, hex: &str) {
@@ -109,6 +82,20 @@ fn update_tray_icon(tray: &mut tray_icon::TrayIcon, hex: &str) {
             }
         }
     }
+}
+
+fn update_color_display(hex_item: &MenuItem, rgb_item: &MenuItem, hex_str: &str) {
+    // Update HEX display
+    hex_item.set_text(&format!("HEX: #{}", hex_str));
+
+    // Update RGB display
+    if let Ok(bytes) = hex::decode(hex_str) {
+        if bytes.len() == 3 {
+            rgb_item.set_text(&format!("RGB: {}, {}, {}", bytes[0], bytes[1], bytes[2]));
+            return;
+        }
+    }
+    rgb_item.set_text("RGB: Invalid");
 }
 
 fn create_color_icon(rgb: [u8; 3]) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
