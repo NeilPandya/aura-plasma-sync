@@ -2,7 +2,7 @@
 
 use crate::app::ControlMsg;
 use anyhow::Result;
-use std::sync::mpsc::Sender;
+use std::sync::{OnceLock, mpsc::Sender};
 use zbus::zvariant::Value;
 
 #[zbus::proxy(
@@ -17,9 +17,21 @@ trait Settings {
     fn read(&self, namespace: &str, key: &str) -> zbus::Result<zbus::zvariant::OwnedValue>;
 }
 
+/// Global connection cache
+static DBUS_CONNECTION: OnceLock<zbus::blocking::Connection> = OnceLock::new();
+
+fn get_dbus_connection() -> Result<&'static zbus::blocking::Connection> {
+    Ok(DBUS_CONNECTION.get_or_init(|| {
+        zbus::blocking::Connection::session().unwrap_or_else(|e| {
+            log::error!("Failed to create DBus connection: {}", e);
+            panic!("Critical: Could not establish DBus connection")
+        })
+    }))
+}
+
 pub fn get_current_accent_color() -> Option<String> {
-    let conn = zbus::blocking::Connection::session().ok()?;
-    let proxy = SettingsProxyBlocking::new(&conn).ok()?;
+    let conn = get_dbus_connection().ok()?;
+    let proxy = SettingsProxyBlocking::new(conn).ok()?;
     let val = proxy
         .read("org.freedesktop.appearance", "accent-color")
         .ok()?;
@@ -27,8 +39,8 @@ pub fn get_current_accent_color() -> Option<String> {
 }
 
 pub fn listen(tx: Sender<ControlMsg>) -> Result<()> {
-    let conn = zbus::blocking::Connection::session()?;
-    let proxy = SettingsProxyBlocking::new(&conn)?;
+    let conn = get_dbus_connection()?;
+    let proxy = SettingsProxyBlocking::new(conn)?;
     let signals = proxy.receive_setting_changed()?;
 
     for signal in signals {
@@ -36,10 +48,10 @@ pub fn listen(tx: Sender<ControlMsg>) -> Result<()> {
         if *args.namespace() == "org.freedesktop.appearance" && *args.key() == "accent-color" {
             if let Some(hex) = parse_rgb_value(args.value()) {
                 let _ = tx.send(ControlMsg::UpdateColor(hex));
-                continue;
+            } else {
+                let _ = tx.send(ControlMsg::TriggerSync);
             }
         }
-        let _ = tx.send(ControlMsg::TriggerSync);
     }
     Ok(())
 }
