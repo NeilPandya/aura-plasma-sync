@@ -11,6 +11,7 @@ A lightweight utility that synchronizes **Asus Aura** lighting with your desktop
   - [Systemd Service (Recommended)](#systemd-service-recommended)
   - [Manual Build & Install](#manual-build--install)
 - [Usage](#usage)
+- [Troubleshooting](#troubleshooting)
 - [Development](#development)
   - [Running Checks](#running-checks)
   - [Building](#building)
@@ -99,6 +100,59 @@ When the service is running, a tray icon appears in your desktop panel.
 
 - **Active** (colored icon) – the sync thread is alive and listening for changes.
 - **Inactive** (gray icon) – syncing is paused; you can toggle it via the tray menu entry **"Toggle Sync"**.
+
+---
+
+## Troubleshooting
+
+### Known Issues
+
+**Ayatana AppIndicator Deprecation Warning**
+
+When running:
+```fish
+❯ journalctl --user -u aura-accent-sync -f
+```
+You may see a warning like:
+```log
+libayatana-appindicator is deprecated. Please use libayatana-appindicator-glib in newly written code.
+```
+
+This warning originates from underlying system libraries used by the tray icon implementation. It's purely cosmetic and doesn't affect functionality. The `tray-icon` crate maintainers are aware of this and will address it in future updates.
+
+**Missing `libxdo.so.3` Error**
+
+If you encounter an error like:
+```bash
+error while loading shared libraries: libxdo.so.3: cannot open shared object file: No such file or directory
+```
+
+This typically happens when the system library `libxdo` has been updated. To fix this:
+
+1. **Rebuild the application** (recommended):
+   ```bash
+   cargo clean
+   cargo install --path .
+   ```
+   or
+   ```bash
+   cargo clean
+   cargo build --release
+   ./target/release/aura-accent-sync install
+   ```
+
+2. **Install the missing library**:
+   ```bash
+   sudo apt-get install libxdo-dev
+   ```
+   ```fish
+   paru -S xdotool  # On Arch/CachyOS
+   ```
+   or
+   ```sh
+   sudo pacman -S xdotool  # On Arch/CachyOS
+   ```
+This issue occurs because the binary was compiled against a specific version of system libraries that may have been updated by your package manager.
 
 ---
 
