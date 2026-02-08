@@ -78,7 +78,7 @@ impl AuraSyncApp {
 
     fn update_hardware(&mut self, hex: &str) -> Result<()> {
         if hex != self.last_hex {
-            executor::set_aura_color(hex)?;
+            executor::set_aura_color_with_brightness_preservation(hex)?;
             self.last_hex = hex.to_string();
 
             if let Some(ref updater) = self.tray_updater {
