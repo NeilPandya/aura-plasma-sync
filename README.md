@@ -144,8 +144,10 @@ This typically happens when the system library `libxdo` has been updated. To fix
    ```
 
 2. **Install the missing library**:
+  e.g.,
    ```bash
    sudo apt-get install libxdo-dev
+   or
    ```
    ```fish
    paru -S xdotool  # On Arch/CachyOS
