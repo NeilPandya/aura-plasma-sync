@@ -5,7 +5,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-// Use generic name for XDG compatibility
 const SERVICE_NAME: &str = "aura-accent-sync.service";
 
 fn get_service_path() -> Result<PathBuf> {
