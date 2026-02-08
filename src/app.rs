@@ -1,6 +1,5 @@
 use anyhow::Result;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 
@@ -12,30 +11,23 @@ pub enum ControlMsg {
 }
 
 pub struct AuraSyncApp {
-    last_hex: String,
-    active: Arc<AtomicBool>,
-    tray_updater: Option<Sender<String>>, // For sending color updates to tray
+    tray_updater: Option<Sender<String>>,
+    last_hex: Mutex<String>,
 }
 
 impl AuraSyncApp {
-    pub fn new(active: Arc<AtomicBool>, tray_updater: Option<Sender<String>>) -> Self {
+    pub fn new(tray_updater: Option<Sender<String>>) -> Self {
         Self {
-            last_hex: String::new(),
-            active,
             tray_updater,
+            last_hex: Mutex::new(String::new()),
         }
     }
 
     pub fn start_sync_thread(
-        mut self,
+        self,
         control_rx: Receiver<ControlMsg>,
         control_tx: Sender<ControlMsg>,
     ) -> Result<()> {
-        // Initial sync only via XDG portal
-        if let Err(e) = self.sync_via_portal() {
-            log::warn!("Initial sync failed: {}", e);
-        }
-
         // Start DBus listener thread
         let dbus_tx = control_tx.clone();
         thread::spawn(move || {
@@ -44,47 +36,43 @@ impl AuraSyncApp {
             }
         });
 
-        // Start control message handler thread
+        // Start main control loop
         thread::spawn(move || {
             for msg in control_rx {
                 match msg {
                     ControlMsg::TriggerSync => {
-                        if let Err(e) = self.sync_via_portal() {
-                            log::error!("Sync failed: {}", e);
+                        if let Some(hex) = portal::get_current_accent_color() {
+                            self.perform_update(hex);
                         }
                     }
                     ControlMsg::UpdateColor(hex) => {
-                        if let Err(e) = self.update_hardware(&hex) {
-                            log::error!("Hardware update failed: {}", e);
-                        }
+                        self.perform_update(hex);
                     }
                 }
             }
         });
 
+        // Trigger an initial sync on startup so hardware matches immediately
+        let _ = control_tx.send(ControlMsg::TriggerSync);
+
         Ok(())
     }
 
-    fn sync_via_portal(&mut self) -> Result<()> {
-        if !self.active.load(Ordering::Relaxed) {
-            return Ok(());
-        }
-
-        if let Some(hex) = portal::get_current_accent_color() {
-            self.update_hardware(&hex)?;
-        }
-        Ok(())
-    }
-
-    fn update_hardware(&mut self, hex: &str) -> Result<()> {
-        if hex != self.last_hex {
-            executor::set_aura_color_with_brightness_preservation(hex)?;
-            self.last_hex = hex.to_string();
-
-            if let Some(ref updater) = self.tray_updater {
-                let _ = updater.send(hex.to_string());
+    fn perform_update(&self, hex: String) {
+        {
+            let mut last = self.last_hex.lock().unwrap();
+            if *last == hex {
+                return;
             }
+            *last = hex.clone();
         }
-        Ok(())
+
+        if let Err(e) = executor::set_aura_color_with_brightness_preservation(&hex) {
+            log::error!("Hardware update failed: {}", e);
+        }
+
+        if let Some(ref updater) = self.tray_updater {
+            let _ = updater.send(hex);
+        }
     }
 }
