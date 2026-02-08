@@ -5,8 +5,9 @@ use std::process::Command;
 
 /// Sets both aura color and preserves keyboard brightness
 pub fn set_aura_color_with_brightness_preservation(hex: &str) -> Result<()> {
-    let brightness_manager = KeyboardBrightnessManager::new()?;
-    brightness_manager.preserve_during(|| execute_aura_static_effect(hex))?;
+    let manager = KeyboardBrightnessManager::new()?;
+    manager.preserve_during(|| execute_aura_static_effect(hex))?;
+
     log::info!("Hardware Updated: #{} (brightness preserved)", hex);
     Ok(())
 }
@@ -27,6 +28,28 @@ fn execute_aura_static_effect(hex: &str) -> Result<()> {
     Ok(())
 }
 
+/// This ensures the brightness is set back even if the main operation fails.
+struct BrightnessGuard {
+    level: u8,
+}
+
+impl BrightnessGuard {
+    fn new(level: u8) -> Self {
+        Self { level }
+    }
+}
+
+impl Drop for BrightnessGuard {
+    fn drop(&mut self) {
+        if let Err(e) = set_keyboard_brightness_level(self.level) {
+            log::error!(
+                "Critical failure: could not restore brightness in Drop guard: {}",
+                e
+            );
+        }
+    }
+}
+
 /// Manages keyboard brightness state
 struct KeyboardBrightnessManager {
     level: u8,
@@ -39,17 +62,14 @@ impl KeyboardBrightnessManager {
         Ok(Self { level })
     }
 
-    /// Execute an operation while preserving the current brightness level
+    /// Execute an operation while preserving the current brightness level.
+    /// Uses a Drop guard to ensure restoration happens even on failure.
     pub fn preserve_during<F>(&self, operation: F) -> Result<()>
     where
         F: FnOnce() -> Result<()>,
     {
-        // Execute the operation
-        operation()?;
-
-        // Restore brightness
-        set_keyboard_brightness_level(self.level)?;
-        Ok(())
+        let _guard = BrightnessGuard::new(self.level);
+        operation()
     }
 }
 
@@ -64,26 +84,22 @@ fn get_current_keyboard_brightness_level() -> Result<u8> {
         bail!("asusctl leds get failed");
     }
 
-    let brightness_str = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_lowercase();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let brightness_str = stdout.trim();
 
-    // Extract just the brightness level from the full string
-    // e.g., "current keyboard led brightness: low" -> "low"
-    let brightness_level = if let Some(pos) = brightness_str.find(':') {
-        brightness_str[pos + 2..].trim() // Skip ": " after the colon
-    } else {
-        &brightness_str // Fallback to whole string if no colon found
-    };
+    let brightness_level = brightness_str
+        .split_once(':')
+        .map(|(_, val)| val.trim())
+        .unwrap_or(brightness_str);
 
-    match brightness_level {
+    match brightness_level.to_lowercase().as_str() {
         "off" => Ok(0),
         "low" => Ok(1),
         "med" => Ok(2),
         "high" => Ok(3),
         _ => {
             log::warn!(
-                "Unknown brightness level '{}' (parsed from '{}'), defaulting to medium",
+                "Unknown brightness level '{}' (full output: '{}'), defaulting to medium",
                 brightness_level,
                 brightness_str
             );
@@ -99,10 +115,7 @@ fn set_keyboard_brightness_level(level: u8) -> Result<()> {
         1 => "low",
         2 => "med",
         3 => "high",
-        _ => {
-            log::warn!("Invalid brightness level {}, defaulting to medium", level);
-            "med"
-        }
+        _ => "med",
     };
 
     let status = Command::new("asusctl")
