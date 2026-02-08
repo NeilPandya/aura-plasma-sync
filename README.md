@@ -111,7 +111,7 @@ When the service is running, a tray icon appears in your desktop panel.
 
 When running:
 ```fish
-❯ journalctl --user -u aura-accent-sync -f
+journalctl --user -u aura-accent-sync -f
 ```
 You may see a warning like:
 ```log
