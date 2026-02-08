@@ -1,13 +1,13 @@
 [package]
 name = "aura-accent-sync"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 authors = ["Neil Pandya <dev@neilpandya.com>"]
 description = "A utility to sync Asus Aura lighting with your XDG-compatible desktop environment's accent color."
 license = "GPL-3.0-or-later"
 
 [dependencies]
-gtk = "0.18.2"
+gtk = { version = "0.18.2", features = ["v3_24"] }
 # For DBus communication with the XDG Settings Portal
 zbus = { version = "5.13.2", features = ["blocking"] }
 # For flexible error handling
