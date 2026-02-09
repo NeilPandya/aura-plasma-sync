@@ -1,131 +1,112 @@
 // src/executor.rs
-
 use anyhow::{Context, Result, bail};
-use std::process::Command;
+use openrgb2::{Color, OpenRgbClient};
+use std::net::SocketAddr;
+use std::sync::OnceLock;
 
-/// Sets both aura color and preserves keyboard brightness
-pub fn set_aura_color_with_brightness_preservation(hex: &str) -> Result<()> {
-    let manager = KeyboardBrightnessManager::new()?;
-    manager.preserve_during(|| execute_aura_static_effect(hex))?;
+const OPENRGB_PROTOCOL_VERSION: u32 = 4;
 
-    log::info!("Hardware Updated: #{} (brightness preserved)", hex);
+static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+pub fn get_runtime() -> &'static tokio::runtime::Runtime {
+    RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime")
+    })
+}
+
+/// Sets the color for all OpenRGB devices
+pub fn sync_colors(hex: &str, host: &str, port: u16) -> Result<()> {
+    let color = parse_hex_to_color(hex)?;
+    let rt = get_runtime();
+
+    let addr_str = format!("{}:{}", host, port);
+    let addr: SocketAddr = addr_str
+        .parse()
+        .with_context(|| format!("Invalid address: {}", addr_str))?;
+
+    rt.block_on(async {
+        let client = OpenRgbClient::connect_to(addr, OPENRGB_PROTOCOL_VERSION)
+            .await
+            .with_context(|| format!("Failed to connect to OpenRGB SDK server at {}:{} - is OpenRGB running with SDK server enabled?", host, port))?;
+
+        // Get all controllers
+        let controllers = client.get_all_controllers().await
+            .context("Failed to retrieve controllers from OpenRGB")?;
+
+        // Early exit if no controllers found
+        if controllers.is_empty() {
+            log::warn!("No OpenRGB controllers found - nothing to update");
+            return Ok(());
+        }
+
+        log::debug!("Found {} controllers, preparing updates", controllers.len());
+
+        // Create a command group for bulk updates
+        let mut command_group = controllers.cmd();
+
+        let mut update_count = 0;
+        // Update all LEDs on all controllers
+        for controller in controllers.controllers() {
+            let led_count = controller.num_leds();
+            if led_count > 0 {
+                let colors = vec![color; led_count];
+                command_group.set_controller_leds(controller.id(), colors)
+                    .with_context(|| format!("Failed to queue LED update for controller '{}' (ID: {})",
+                                           controller.name(), controller.id()))?;
+                update_count += 1;
+            } else {
+                log::debug!("Controller '{}' (ID: {}) has 0 LEDs, skipping",
+                           controller.name(), controller.id());
+            }
+        }
+
+        if update_count == 0 {
+            log::warn!("No controllers had LEDs to update");
+            return Ok(());
+        }
+
+        log::debug!("Queued updates for {} controllers, executing...", update_count);
+
+        // Execute all commands in a single network call
+        command_group.execute()
+            .await
+            .context("Failed to execute LED updates - check OpenRGB SDK server connection")?;
+
+        log::debug!("Successfully updated {} controllers", update_count);
+        Ok::<(), anyhow::Error>(())
+    })?;
+
+    log::info!(
+        "Hardware Updated: #{} (connected to {}:{} protocol v{})",
+        hex,
+        host,
+        port,
+        OPENRGB_PROTOCOL_VERSION
+    );
     Ok(())
 }
 
-/// Execute the aura static effect command
-fn execute_aura_static_effect(hex: &str) -> Result<()> {
-    let status = Command::new("asusctl")
-        .args(["aura", "effect", "static", "-c", hex])
-        .status()
-        .context("Failed to execute asusctl color command")?;
+fn parse_hex_to_color(hex_str: &str) -> Result<Color> {
+    let clean_hex = hex_str.trim_start_matches('#');
+    let bytes = hex::decode(clean_hex)
+        .with_context(|| format!("Invalid hex color format: '{}'", hex_str))?;
 
-    if !status.success() {
+    if bytes.len() != 3 {
         bail!(
-            "asusctl color command failed with exit code {:?}",
-            status.code().unwrap_or(1)
+            "Expected 3 bytes for RGB (RRGGBB), got {} bytes",
+            bytes.len()
         );
     }
-    Ok(())
-}
 
-/// This ensures the brightness is set back even if the main operation fails.
-struct BrightnessGuard {
-    level: u8,
-}
-
-impl BrightnessGuard {
-    fn new(level: u8) -> Self {
-        Self { level }
-    }
-}
-
-impl Drop for BrightnessGuard {
-    fn drop(&mut self) {
-        if let Err(e) = set_keyboard_brightness_level(self.level) {
-            log::error!(
-                "Critical failure: could not restore brightness in Drop guard: {}",
-                e
-            );
-        }
-    }
-}
-
-/// Manages keyboard brightness state
-struct KeyboardBrightnessManager {
-    level: u8,
-}
-
-impl KeyboardBrightnessManager {
-    /// Create a new brightness manager by reading current brightness
-    pub fn new() -> Result<Self> {
-        let level = get_current_keyboard_brightness_level()?;
-        Ok(Self { level })
-    }
-
-    /// Execute an operation while preserving the current brightness level.
-    /// Uses a Drop guard to ensure restoration happens even on failure.
-    pub fn preserve_during<F>(&self, operation: F) -> Result<()>
-    where
-        F: FnOnce() -> Result<()>,
-    {
-        let _guard = BrightnessGuard::new(self.level);
-        operation()
-    }
-}
-
-/// Get current keyboard brightness level (0=off, 1=low, 2=med, 3=high)
-fn get_current_keyboard_brightness_level() -> Result<u8> {
-    let output = Command::new("asusctl")
-        .args(["leds", "get"])
-        .output()
-        .context("Failed to execute asusctl leds get")?;
-
-    if !output.status.success() {
-        bail!("asusctl leds get failed");
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let brightness_str = stdout.trim();
-
-    let brightness_level = brightness_str
-        .split_once(':')
-        .map(|(_, val)| val.trim())
-        .unwrap_or(brightness_str);
-
-    match brightness_level.to_lowercase().as_str() {
-        "off" => Ok(0),
-        "low" => Ok(1),
-        "med" => Ok(2),
-        "high" => Ok(3),
-        _ => {
-            log::warn!(
-                "Unknown brightness level '{}' (full output: '{}'), defaulting to medium",
-                brightness_level,
-                brightness_str
-            );
-            Ok(2) // Default to medium
-        }
-    }
-}
-
-/// Set keyboard brightness level (0=off, 1=low, 2=med, 3=high)
-fn set_keyboard_brightness_level(level: u8) -> Result<()> {
-    let level_str = match level {
-        0 => "off",
-        1 => "low",
-        2 => "med",
-        3 => "high",
-        _ => "med",
-    };
-
-    let status = Command::new("asusctl")
-        .args(["leds", "set", level_str])
-        .status()
-        .context("Failed to execute asusctl leds set")?;
-
-    if !status.success() {
-        bail!("asusctl leds set failed");
-    }
-
-    Ok(())
+    let color = Color::new(bytes[0], bytes[1], bytes[2]);
+    log::debug!(
+        "Parsed color: #{:02x}{:02x}{:02x}",
+        color.r,
+        color.g,
+        color.b
+    );
+    Ok(color)
 }
