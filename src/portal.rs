@@ -63,15 +63,19 @@ fn parse_rgb_value(mut value: &Value) -> Option<String> {
 
     if let Value::Structure(s) = value {
         let f = s.fields();
-        if f.len() == 3 {
-            if let (Value::F64(r), Value::F64(g), Value::F64(b)) = (&f[0], &f[1], &f[2]) {
-                return Some(format!(
-                    "{:02x}{:02x}{:02x}",
-                    (r * 255.0).round() as u8,
-                    (g * 255.0).round() as u8,
-                    (b * 255.0).round() as u8
-                ));
-            }
+        // Add debug logging when struct field count doesn't match expected 3 fields
+        if f.len() != 3 {
+            log::debug!("Accent color struct has {} fields, expected 3", f.len());
+            return None;
+        }
+
+        if let (Value::F64(r), Value::F64(g), Value::F64(b)) = (&f[0], &f[1], &f[2]) {
+            return Some(format!(
+                "{:02x}{:02x}{:02x}",
+                (r * 255.0).round() as u8,
+                (g * 255.0).round() as u8,
+                (b * 255.0).round() as u8
+            ));
         }
     }
     None
