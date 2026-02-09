@@ -1,6 +1,6 @@
-# aura-accent-sync
+# openrgb-accent-sync
 
-A lightweight utility that synchronizes **Asus Aura** lighting with your desktop environment's accent color via **`asusctl`** and the **XDG Settings Portal** standard.
+Synchronize your XDG-compliant desktop environment's accent color with any **OpenRGB-compatible lighting hardware** via the **OpenRGB SDK Server**.
 
 ---
 
@@ -37,13 +37,11 @@ A lightweight utility that synchronizes **Asus Aura** lighting with your desktop
 
 ## Prerequisites
 
-- **Rust**: Installed via [rustup](https://rust-lang.github.io/rustup/) (required for building from source)
-- **Asus Hardware**: Device with Aura RGB lighting supported by `asusctl`
-- [**`asusctl`**](https://gitlab.com/asus-linux/asusctl): The utility that controls Asus Aura devices (tested with v6.3.2+)
-```bash
-asusctl aura effect static -c <hex-color>
-```
-
+- **Rust**: Installed via [rustup](https://rust-lang.github.io/rustup/)
+- **OpenRGB**: Version 0.9 or later with **SDK Server enabled**. 
+  - Download: [openrgb.io](https://openrgb.io)
+  - Verify SDK server is listening: `nc -zv 127.0.0.1 6742` (default port)
+  - Check connected devices: Run OpenRGB and view the device list in the GUI
 - **XDG Settings Portal**: Available in modern desktop environments
 - **systemd** (user-level): For running the service (recommended)
 
@@ -63,8 +61,8 @@ Required Rust crates:
 The project ships an installer that creates a **user‑level systemd service** pointing to the binary you just built.
 
 ```bash
-git clone https://github.com/neilpandya/aura-accent-sync
-cd aura-accent-sync
+git clone https://codeberg.org/neilpandya/openrgb-accent-sync
+openrgb-accent-sync install
 cargo install --path .
 aura-plasma-sync install
 ```
@@ -77,31 +75,47 @@ The installer:
 
 To verify:
 ```bash
-systemctl --user status aura-plasma-sync.service
+systemctl --user status openrgb-accent-sync.service
 ```
 
 ### Manual Build & Install
 ```bash
-git clone https://github.com/neilpandya/aura-accent-sync
-cd aura-accent-sync
+git clone https://codeberg.org/neilpandya/openrgb-accent-sync
+cd openrgb-accent-sync
 cargo build --release
-sudo cp target/release/aura-accent-sync /usr/local/bin/
+sudo cp target/release/openrgb-accent-sync /usr/local/bin/
 ```
 
-To stop or disable later:
+#### Custom Host/Port Configuration
+
+By default, the utility connects to the OpenRGB SDK server at `127.0.0.1:6742`. To use a different host or port (e.g., for remote OpenRGB instances):
+
 ```bash
-aura-accent-sync uninstall
+# During installation
+openrgb-accent-sync install --host <your-host-ip-here> --port <your-port-here>
+
+# Or manually edit the systemd unit
+systemctl --user edit openrgb-accent-sync.service
+# Modify the ExecStart= line with your desired --host and --port flags
+systemctl --user daemon-reload
+systemctl --user restart openrgb-accent-sync
 ```
 
 ---
 
-Usage
-The utility works in the background; you do not need to interact with it directly unless you wish to change the toggle.
+## Usage
+
+The utility works in the background; you do not need to interact with it directly.
 
 When the service is running, a tray icon appears in your desktop panel.
 
-- **Active** (colored icon) – the sync thread is alive and listening for changes.
-- **Inactive** (gray icon) – syncing is paused; you can toggle it via the tray menu entry **"Toggle Sync"**.
+- **Colored icon** – Displays the current accent color.
+- **Tray menu** – Shows the current HEX and RGB values of the synced color.
+
+To stop or disable later:
+```bash
+openrgb-accent-sync uninstall
+```
 
 ---
 
@@ -109,10 +123,10 @@ When the service is running, a tray icon appears in your desktop panel.
 
 ### Known Issues
 
-**Ayatana AppIndicator Deprecation Warning**
+#### Ayatana AppIndicator Deprecation Warning
 
 When running:
-```fish
+```bash
 journalctl --user -u aura-accent-sync -f
 ```
 You may see a warning like:
@@ -122,7 +136,7 @@ libayatana-appindicator is deprecated. Please use libayatana-appindicator-glib i
 
 This warning originates from underlying system libraries used by the tray icon implementation. It's purely cosmetic and doesn't affect functionality. The `tray-icon` crate maintainers are aware of this and will address it in future updates.
 
-**Missing `libxdo.so.3` Error**
+#### Missing `libxdo.so.3` Error
 
 If you encounter an error like:
 ```bash
@@ -157,7 +171,72 @@ This typically happens when the system library `libxdo` has been updated. To fix
    ```sh
    sudo pacman -S xdotool  # On Arch/CachyOS
    ```
+
 This issue occurs because the binary was compiled against a specific version of system libraries that may have been updated by your package manager.
+
+#### `Failed to connect to OpenRGB SDK server`:
+
+1. **Verify OpenRGB is running:**
+   ```bash
+   pgrep -a openrgb  # Should list the OpenRGB process
+   ```
+
+2. **Check SDK Server is enabled:**
+   - Open OpenRGB GUI → Settings → General
+   - Ensure "Start Server" is checked
+   - Default port should be `6742`
+
+3. **Test connectivity:**
+   ```bash
+   nc -zv 127.0.0.1 6742
+   ```
+   If connection fails, the SDK server is not listening.
+
+4. **Verify protocol version:**
+   - openrgb-accent-sync requires **Protocol v4** (OpenRGB 0.9+)
+   - Check your OpenRGB version: `openrgb --version` or GUI → Help → About
+
+#### No Devices Updating
+
+If the color syncs but no LEDs change:
+
+1. **Check OpenRGB can see devices:**
+   - Open OpenRGB GUI → Device List
+   - At least one device should be listed
+
+2. **Verify device mode:**
+   - In OpenRGB GUI, click each device
+   - Set mode to **"Direct"** or **"Static"** (not "Disabled")
+   - `openrgb-accent-sync` sends direct color commands
+
+3. **Check logs for errors:**
+   ```bash
+   journalctl --user -u openrgb-accent-sync -f
+   ```
+   Look for lines like `Failed to queue LED update` or `No controllers had LEDs to update`
+
+#### Color Not Syncing Immediately
+
+If the accent color changes in your DE but the LEDs don't update:
+
+1. **Verify XDG Portal is working:**
+   ```bash
+   gdbus call --session --dest org.freedesktop.portal.Desktop \
+   --object-path /org/freedesktop/portal/desktop \
+   --method org.freedesktop.portal.Settings.Read \
+   org.freedesktop.appearance accent-color
+   ```
+
+2. **Check service is running:**
+   ```bash
+   systemctl --user status openrgb-accent-sync.service
+   ```
+
+3. **Enable debug logging:**
+   ```bash
+   RUST_LOG=debug journalctl --user -u openrgb-accent-sync -f
+   ```
+   Look for `Parsed color:` and `Hardware Updated:` lines to confirm the sync cycle completed.
 
 ---
 
@@ -186,6 +265,19 @@ See the `LICENSE` file for more information.
 ---
 
 ## Contributing
+
+This project recently transitioned from Asus-specific (AniMatrix) to universal OpenRGB support. 
+
+We welcome contributions such as:
+- Bug reports and fixes
+- Documentation improvements
+- Support for additional OpenRGB features (e.g., device-specific profiles)
+- Testing and debugging
+- CI/CD pipeline setup (GitHub Actions)
+
+
+### Contributing Guidelines
+
 Contributions are welcome! Please:
 
 1. Fork the repository.
@@ -197,4 +289,4 @@ Contributions are welcome! Please:
 
 ---
 
-*Enjoy a perfectly synced glow between your Asus hardware and your Desktop Environment!*
+*Enjoy perfectly synced lighting across all your OpenRGB-compatible hardware and desktop environment!*
