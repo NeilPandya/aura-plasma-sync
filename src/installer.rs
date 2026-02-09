@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-const SERVICE_NAME: &str = "aura-accent-sync.service";
+const SERVICE_NAME: &str = "openrgb-accent-sync.service";
 
 fn get_service_path() -> Result<PathBuf> {
     let config_dir = std::env::var_os("XDG_CONFIG_HOME")
@@ -30,28 +30,29 @@ fn systemctl_user(args: &[&str]) -> Result<()> {
     }
 }
 
-pub fn install() -> Result<()> {
+pub fn install(host: &str, port: u16) -> Result<()> {
     let service_path = get_service_path()?;
     let current_exe = std::env::current_exe()?;
-    let description = env!("CARGO_PKG_DESCRIPTION");
+
+    // Construct ExecStart with the same flags used during installation
+    let exec_start = format!("{} --host {} --port {}", current_exe.display(), host, port);
 
     if let Some(parent) = service_path.parent() {
         fs::create_dir_all(parent)?;
     }
 
     let content = format!(
-        "[Unit]\nDescription={}\nAfter=graphical-session.target\n\n\
-        [Service]\nExecStart={}\nRestart=always\n\n\
+        "[Unit]\nDescription=OpenRGB XDG Accent Color Sync\nAfter=graphical-session.target\n\n\
+        [Service]\nExecStart={}\nRestart=always\nRestartSec=5\n\n\
         [Install]\nWantedBy=graphical-session.target",
-        description,
-        current_exe.display()
+        exec_start
     );
 
     fs::write(&service_path, content)?;
     systemctl_user(&["daemon-reload"])?;
     systemctl_user(&["enable", "--now", SERVICE_NAME])?;
 
-    log::info!("Service installed and started.");
+    log::info!("Service installed with configuration: {}:{}", host, port);
     Ok(())
 }
 
