@@ -57,6 +57,8 @@ pub fn spawn_tray(color_rx: Receiver<String>) -> thread::JoinHandle<()> {
 
             Err(e) => {
                 log::error!("Failed to create system tray icon: {}", e);
+                // Document expected behavior if GTK initialization fails
+                log::warn!("Continuing to run without system tray icon");
             }
         }
     })
@@ -73,13 +75,19 @@ fn update_tray_visuals(
 }
 
 fn update_tray_icon(tray: &mut tray_icon::TrayIcon, hex: &str) {
-    if let Ok(color) = hex::decode(hex) {
-        if color.len() == 3 {
-            let img = create_color_icon([color[0], color[1], color[2]]);
-            let buf = img.into_vec();
-            if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, 16, 16) {
-                let _ = tray.set_icon(Some(rgba_icon));
+    match hex::decode(hex) {
+        Ok(color) => {
+            if color.len() == 3 {
+                let img = create_color_icon([color[0], color[1], color[2]]);
+                let buf = img.into_vec();
+                if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, 16, 16) {
+                    let _ = tray.set_icon(Some(rgba_icon));
+                }
             }
+        }
+        Err(e) => {
+            // Add warning when icon decoding fails
+            log::warn!("Failed to decode hex color for tray icon '{}': {}", hex, e);
         }
     }
 }
