@@ -1,6 +1,7 @@
 // src/main.rs
 
 mod app;
+mod color;
 mod env_check;
 mod executor;
 mod installer;
