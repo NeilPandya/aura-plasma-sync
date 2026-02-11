@@ -1,6 +1,7 @@
 // src/portal.rs
 
 use crate::app::ControlMsg;
+use crate::color;
 use anyhow::Result;
 use std::sync::{OnceLock, mpsc::Sender};
 use zbus::zvariant::Value;
@@ -35,7 +36,7 @@ pub fn get_current_accent_color() -> Option<String> {
     let val = proxy
         .read("org.freedesktop.appearance", "accent-color")
         .ok()?;
-    parse_rgb_value(&val)
+    color::parse_rgb_value(&val)
 }
 
 pub fn listen(tx: Sender<ControlMsg>) -> Result<()> {
@@ -46,7 +47,7 @@ pub fn listen(tx: Sender<ControlMsg>) -> Result<()> {
     for signal in signals {
         let Ok(args) = signal.args() else { continue };
         if *args.namespace() == "org.freedesktop.appearance" && *args.key() == "accent-color" {
-            if let Some(hex) = parse_rgb_value(args.value()) {
+            if let Some(hex) = color::parse_rgb_value(args.value()) {
                 let _ = tx.send(ControlMsg::UpdateColor(hex));
             } else {
                 let _ = tx.send(ControlMsg::TriggerSync);
@@ -54,25 +55,4 @@ pub fn listen(tx: Sender<ControlMsg>) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn parse_rgb_value(mut value: &Value) -> Option<String> {
-    while let Value::Value(inner) = value {
-        value = inner;
-    }
-
-    if let Value::Structure(s) = value {
-        let f = s.fields();
-        if f.len() == 3 {
-            if let (Value::F64(r), Value::F64(g), Value::F64(b)) = (&f[0], &f[1], &f[2]) {
-                return Some(format!(
-                    "{:02x}{:02x}{:02x}",
-                    (r * 255.0).round() as u8,
-                    (g * 255.0).round() as u8,
-                    (b * 255.0).round() as u8
-                ));
-            }
-        }
-    }
-    None
 }
