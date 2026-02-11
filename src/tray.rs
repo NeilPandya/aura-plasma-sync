@@ -1,5 +1,6 @@
 // src/tray.rs
 
+use crate::color;
 use gtk;
 use image::{ImageBuffer, Rgba};
 use std::sync::mpsc::Receiver;
@@ -48,7 +49,11 @@ pub fn spawn_tray(color_rx: Receiver<String>) -> thread::JoinHandle<()> {
 
                     // Handle color updates only
                     if let Ok(color) = color_rx.try_recv() {
-                        update_tray_visuals(&mut tray, &hex_item, &rgb_item, &color);
+                        if let Ok(normalized_hex) = color::normalize_hex(&color) {
+                            update_tray_visuals(&mut tray, &hex_item, &rgb_item, &normalized_hex);
+                        } else {
+                            log::warn!("Invalid hex color received: {}", color);
+                        }
                     }
 
                     std::thread::sleep(std::time::Duration::from_millis(20));
@@ -73,9 +78,9 @@ fn update_tray_visuals(
 }
 
 fn update_tray_icon(tray: &mut tray_icon::TrayIcon, hex: &str) {
-    if let Ok(color) = hex::decode(hex) {
-        if color.len() == 3 {
-            let img = create_color_icon([color[0], color[1], color[2]]);
+    if let Ok(color_bytes) = hex::decode(hex) {
+        if color_bytes.len() == 3 {
+            let img = create_color_icon([color_bytes[0], color_bytes[1], color_bytes[2]]);
             let buf = img.into_vec();
             if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, 16, 16) {
                 let _ = tray.set_icon(Some(rgba_icon));
