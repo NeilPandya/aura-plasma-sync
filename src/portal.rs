@@ -23,10 +23,7 @@ static DBUS_CONNECTION: OnceLock<zbus::blocking::Connection> = OnceLock::new();
 
 fn get_dbus_connection() -> Result<&'static zbus::blocking::Connection> {
     Ok(DBUS_CONNECTION.get_or_init(|| {
-        zbus::blocking::Connection::session().unwrap_or_else(|e| {
-            log::error!("Failed to create DBus connection: {}", e);
-            panic!("Critical: Could not establish DBus connection")
-        })
+        zbus::blocking::Connection::session().expect("Failed to create DBus connection")
     }))
 }
 
