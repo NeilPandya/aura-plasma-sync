@@ -61,9 +61,6 @@ impl KeyboardBrightnessManager {
         let level = get_current_keyboard_brightness_level()?;
         Ok(Self { level })
     }
-
-    /// Execute an operation while preserving the current brightness level.
-    /// Uses a Drop guard to ensure restoration happens even on failure.
     pub fn preserve_during<F>(&self, operation: F) -> Result<()>
     where
         F: FnOnce() -> Result<()>,
