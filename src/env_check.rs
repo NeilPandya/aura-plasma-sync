@@ -8,9 +8,7 @@ pub fn validate_dependencies() -> Result<()> {
     let deps = [("asusctl", "asusctl not found - please install asusctl")];
 
     for (cmd, msg) in &deps {
-        which(cmd)
-            .map_err(|_| anyhow!("{}", msg))
-            .context(format!("Dependency check failed for '{}'", cmd))?;
+        which(cmd).map_err(|_| anyhow!("{}", msg))?;
     }
 
     // Non-fatal validation for asusctl version
