@@ -1,5 +1,4 @@
 // src/tray.rs
-
 use crate::color;
 use gtk;
 use image::{ImageBuffer, Rgba};
