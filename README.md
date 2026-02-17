@@ -31,7 +31,7 @@ A lightweight utility that synchronizes **Asus Aura** lighting with your desktop
   - Pantheon (elementary OS)
   - And any other DE that implements the XDG Settings Portal
 - **Systemd Integration**: Includes an installer for persistent background service
-- **Tray Integration**: Provides a system tray icon with toggle functionality
+- **Tray Integration**: Provides a system tray icon with a color preview
 
 ---
 
@@ -52,7 +52,6 @@ Required Rust crates:
 - `anyhow` – Error handling
 - `clap` – Command-line parsing
 - `tray-icon` – Cross-platform system tray
-- `which` – Dependency validation
 - `log` / `env_logger` – Logging
 
 ---
@@ -66,18 +65,18 @@ The project ships an installer that creates a **user‑level systemd service** p
 git clone https://github.com/neilpandya/aura-accent-sync
 cd aura-accent-sync
 cargo install --path .
-aura-plasma-sync install
+aura-accent-sync install
 ```
 
 The installer:
 1. Detects the current executable path.
-2. Writes a unit file into `~/.config/systemd/user/aura-plasma-sync.service`.
+2. Writes a unit file into `~/.config/systemd/user/aura-accent-sync.service`.
 3. Reloads the systemd daemon.
 4. Enables and starts the service immediately.
 
 To verify:
 ```bash
-systemctl --user status aura-plasma-sync.service
+systemctl --user status aura-accent-sync.service
 ```
 
 ### Manual Build & Install
