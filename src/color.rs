@@ -1,51 +1,38 @@
-//src/color.rs
+// src/color.rs
+// Provides a centralized library of color parsing, image buffer creation, and string formatting utilities.
 
-use anyhow::{Result, anyhow};
+use image::{ImageBuffer, Rgba};
 
-/// Converts RGB values (each in the range [0.0, 1.0]) to a hex string
-pub fn rgb_to_hex(r: f64, g: f64, b: f64) -> String {
-    // Clamp values to prevent out-of-range errors
-    let r = r.clamp(0.0, 1.0);
-    let g = g.clamp(0.0, 1.0);
-    let b = b.clamp(0.0, 1.0);
-
-    format!(
-        "{:02x}{:02x}{:02x}",
+/// Converts normalized F64 RGB values (0.0-1.0) from XDG Portal to u8 bytes
+pub fn from_f64_rgb(r: f64, g: f64, b: f64) -> [u8; 3] {
+    [
         (r * 255.0).round() as u8,
         (g * 255.0).round() as u8,
-        (b * 255.0).round() as u8
-    )
+        (b * 255.0).round() as u8,
+    ]
 }
 
-/// Parses a DBus value containing RGB color information and returns a hex string
-pub fn parse_rgb_value(value: &zbus::zvariant::Value) -> Option<String> {
-    // Directly match the expected structure without while-loop unwrapping
-    if let zbus::zvariant::Value::Structure(s) = value {
-        let f = s.fields();
-        if f.len() == 3 {
-            if let (
-                zbus::zvariant::Value::F64(r),
-                zbus::zvariant::Value::F64(g),
-                zbus::zvariant::Value::F64(b),
-            ) = (&f[0], &f[1], &f[2])
-            {
-                return Some(rgb_to_hex(*r, *g, *b));
-            }
-        }
-    }
-    None
+/// Formats RGB array to hex string (without #)
+pub fn to_hex_string(rgb: [u8; 3]) -> String {
+    format!("{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2])
 }
 
-/// Validates a hex color string and returns it in a consistent format
-pub fn normalize_hex(hex: &str) -> Result<String> {
-    let hex = hex.trim().trim_start_matches('#');
-    if hex.len() != 6 {
-        return Err(anyhow!("Hex color must be 6 characters long"));
-    }
+/// Formats RGB values for display in tray menu
+pub fn format_rgb_string(rgb: [u8; 3]) -> String {
+    format!("RGB: {}, {}, {}", rgb[0], rgb[1], rgb[2])
+}
 
-    if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(anyhow!("Hex color contains invalid characters"));
-    }
+/// Formats hex string for display in tray menu
+pub fn format_hex_string(rgb: [u8; 3]) -> String {
+    format!("HEX: #{}", to_hex_string(rgb))
+}
 
-    Ok(hex.to_lowercase())
+/// Creates a solid color icon for the tray
+pub fn create_color_icon(rgb: [u8; 3]) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+    let mut img = ImageBuffer::new(16, 16);
+    let color = Rgba([rgb[0], rgb[1], rgb[2], 255]);
+    for pixel in img.pixels_mut() {
+        *pixel = color;
+    }
+    img
 }
