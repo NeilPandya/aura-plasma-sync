@@ -1,16 +1,21 @@
 // src/executor.rs
+// Manages synchronous hardware-level LED updates via asusctl.
 
 use anyhow::{Context, Result, bail};
 use std::process::Command;
 
-/// Sets both aura color and preserves keyboard brightness
-pub fn set_aura_color_with_brightness_preservation(hex: &str) -> Result<()> {
+// Public API: sync colors to Aura devices
+pub fn sync_colors(rgb: [u8; 3], _host: &str, _port: u16) -> Result<()> {
+    let hex = crate::color::to_hex_string(rgb);
+
     let manager = KeyboardBrightnessManager::new()?;
-    manager.preserve_during(|| execute_aura_static_effect(hex))?;
+    manager.preserve_during(|| execute_aura_static_effect(&hex))?;
 
     log::info!("Hardware Updated: #{} (brightness preserved)", hex);
     Ok(())
 }
+
+// Private implementation details: helpers first, then orchestrator
 
 /// Execute the aura static effect command
 fn execute_aura_static_effect(hex: &str) -> Result<()> {
@@ -61,6 +66,7 @@ impl KeyboardBrightnessManager {
         let level = get_current_keyboard_brightness_level()?;
         Ok(Self { level })
     }
+
     pub fn preserve_during<F>(&self, operation: F) -> Result<()>
     where
         F: FnOnce() -> Result<()>,
