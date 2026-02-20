@@ -94,13 +94,13 @@ aura-accent-sync uninstall
 
 ---
 
-Usage
-The utility works in the background; you do not need to interact with it directly unless you wish to change the toggle.
+## Usage
 
-When the service is running, a tray icon appears in your desktop panel.
+The utility works in the background and requires no manual interaction. Once started, it automatically listens for system color changes and updates your hardware accordingly.
 
-- **Active** (colored icon) – the sync thread is alive and listening for changes.
-- **Inactive** (gray icon) – syncing is paused; you can toggle it via the tray menu entry **"Toggle Sync"**.
+When the service is running, a tray icon appears in your desktop panel:
+- **Color Preview**: The tray icon displays a solid block of the current synchronized accent color.
+- **Color Info**: Right-click the tray icon to view the specific HEX and RGB values currently applied to your hardware.
 
 ---
 
