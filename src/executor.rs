@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use std::process::Command;
 
 // Public API: sync colors to Aura devices
-pub fn sync_colors(rgb: [u8; 3], _host: &str, _port: u16) -> Result<()> {
+pub fn sync_colors(rgb: [u8; 3]) -> Result<()> {
     let hex = crate::color::to_hex_string(rgb);
 
     let manager = KeyboardBrightnessManager::new()?;
