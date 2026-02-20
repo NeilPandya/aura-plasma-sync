@@ -285,7 +285,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "aura-accent-sync"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -293,7 +293,6 @@ dependencies = [
  "gtk",
  "image",
  "log",
- "tokio",
  "tray-icon",
  "zbus",
 ]
@@ -2278,15 +2277,6 @@ dependencies = [
  "quick-error",
  "weezl",
  "zune-jpeg 0.4.21",
-]
-
-[[package]]
-name = "tokio"
-version = "1.49.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
-dependencies = [
- "pin-project-lite",
 ]
 
 [[package]]
