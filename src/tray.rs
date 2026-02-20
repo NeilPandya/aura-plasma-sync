@@ -9,32 +9,25 @@ use tray_icon::{
     menu::{Menu, MenuItem},
 };
 
-// Private helpers (ordered by dependency - low-level first)
+// Private helpers
 
-/// Updates the tray icon with a solid color preview
-fn update_tray_icon(tray: &mut tray_icon::TrayIcon, rgb: [u8; 3]) {
-    let img = crate::color::create_color_icon(rgb);
-    let buf = img.into_vec();
-    if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, 16, 16) {
-        let _ = tray.set_icon(Some(rgba_icon));
-    }
-}
-
-/// Updates the menu text with color information
-fn update_color_display(hex_item: &MenuItem, rgb_item: &MenuItem, rgb: [u8; 3]) {
-    hex_item.set_text(&crate::color::format_hex_string(rgb));
-    rgb_item.set_text(&crate::color::format_rgb_string(rgb));
-}
-
-/// Orchestrates tray UI updates for a new color
+/// Updates the tray icon and menu items
 fn update_tray_visuals(
     tray: &mut tray_icon::TrayIcon,
     hex_item: &MenuItem,
     rgb_item: &MenuItem,
     rgb: [u8; 3],
 ) {
-    update_tray_icon(tray, rgb);
-    update_color_display(hex_item, rgb_item, rgb);
+    // Update tray icon
+    let img = crate::color::create_color_icon(rgb);
+    let buf = img.into_vec();
+    if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, 16, 16) {
+        let _ = tray.set_icon(Some(rgba_icon));
+    }
+
+    // Update menu text
+    hex_item.set_text(&crate::color::format_hex_string(rgb));
+    rgb_item.set_text(&crate::color::format_rgb_string(rgb));
 }
 
 /// Spawns the system tray UI thread with the provided color receiver
