@@ -18,6 +18,58 @@ trait Settings {
     fn read(&self, namespace: &str, key: &str) -> zbus::Result<zbus::zvariant::OwnedValue>;
 }
 
+/// Represents an XDG Portal RGB color value structure
+#[derive(Debug)]
+struct XdgPortalColor {
+    r: f64,
+    g: f64,
+    b: f64,
+}
+
+impl TryFrom<&Value<'_>> for XdgPortalColor {
+    type Error = &'static str;
+
+    fn try_from(value: &Value<'_>) -> Result<Self, Self::Error> {
+        // Unwrap Value::Value wrappers to get to the actual structure
+        let mut value = value;
+        while let Value::Value(inner) = value {
+            value = inner;
+        }
+
+        // Extract structure fields
+        if let Value::Structure(s) = value {
+            let fields = s.fields();
+            if fields.len() == 3 {
+                if let (Value::F64(r), Value::F64(g), Value::F64(b)) =
+                    (&fields[0], &fields[1], &fields[2])
+                {
+                    return Ok(XdgPortalColor {
+                        r: *r,
+                        g: *g,
+                        b: *b,
+                    });
+                }
+            }
+        }
+
+        Err("Invalid XDG Portal color structure")
+    }
+}
+
+impl XdgPortalColor {
+    /// Converts the normalized color to RGB bytes
+    pub fn to_rgb_bytes(&self) -> [u8; 3] {
+        crate::color::from_f64_rgb(self.r, self.g, self.b)
+    }
+
+    /// Validates that the color values are within expected range (0.0-1.0)
+    pub fn is_valid(&self) -> bool {
+        (0.0..=1.0).contains(&self.r)
+            && (0.0..=1.0).contains(&self.g)
+            && (0.0..=1.0).contains(&self.b)
+    }
+}
+
 /// Global connection cache for DBus session
 static DBUS_CONNECTION: OnceLock<zbus::blocking::Connection> = OnceLock::new();
 
@@ -43,22 +95,10 @@ fn create_settings_proxy(conn: &zbus::blocking::Connection) -> Result<SettingsPr
 }
 
 fn parse_rgb_value(value: &Value) -> Option<[u8; 3]> {
-    let mut value = value;
-    while let Value::Value(inner) = value {
-        value = inner;
-    }
-
-    if let Value::Structure(s) = value {
-        let fields = s.fields();
-        if fields.len() == 3 {
-            if let (Value::F64(r), Value::F64(g), Value::F64(b)) =
-                (&fields[0], &fields[1], &fields[2])
-            {
-                return Some(crate::color::from_f64_rgb(*r, *g, *b));
-            }
-        }
-    }
-    None
+    XdgPortalColor::try_from(value)
+        .ok()
+        .filter(XdgPortalColor::is_valid)
+        .map(|color| color.to_rgb_bytes())
 }
 
 // Public API: get current accent color
