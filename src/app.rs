@@ -44,7 +44,7 @@ impl AuraSync {
             crate::color::to_hex_string(rgb)
         );
 
-        if let Err(e) = executor::sync_colors(rgb, "127.0.0.1", 6742) {
+        if let Err(e) = executor::sync_colors(rgb) {
             log::error!("Hardware update failed: {}", e);
         }
 
