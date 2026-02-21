@@ -144,18 +144,23 @@ This typically happens when the system library `libxdo` has been updated. To fix
 
 2. **Install the missing library**:
   e.g.,
-   ```bash
-   sudo apt-get install libxdo-dev
-   ```
-   or
-   ```
-   ```fish
-   paru -S xdotool  # On Arch/CachyOS
-   ```
-   or
-   ```sh
-   sudo pacman -S xdotool  # On Arch/CachyOS
-   ```
+
+```bash
+sudo apt-get install libxdo-dev
+``` 
+
+or
+
+```fish
+paru -S xdotool  # On Arch/CachyOS
+```
+ 
+or
+ 
+```sh
+sudo pacman -S xdotool  # On Arch/CachyOS
+```
+
 This issue occurs because the binary was compiled against a specific version of system libraries that may have been updated by your package manager.
 
 ---
