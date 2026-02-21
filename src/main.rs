@@ -46,23 +46,47 @@ fn run_application() -> Result<()> {
     // Validate environment dependencies before starting
     env::validate_dependencies()?;
 
-    // Set up communication channels
-    let (control_tx, control_rx) = mpsc::channel();
-    let (tray_update_tx, tray_update_rx) = mpsc::channel::<[u8; 3]>();
+    // Set up high-level communication
+    let (control_tx, control_rx) = mpsc::channel::<app::ControlMsg>();
 
-    // Spawn system tray UI
-    let tray_handle = tray::spawn_tray(tray_update_rx);
+    // Spawn tray and get the custom TraySender
+    let (tray_sender, tray_handle) = tray::spawn_tray();
 
-    // Create and start the application
-    let sync_app = app::AuraSync::new(Some(tray_update_tx));
-    sync_app
-        .start_sync_thread(control_rx, control_tx)
-        .map_err(|e| anyhow::anyhow!("Failed to start sync thread: {e}"))?;
+    // Create the application state
+    let sync_app = std::sync::Arc::new(app::AuraSync::new(Some(tray_sender)));
+
+    // Spawn the Portal Listener
+    let portal_tx = control_tx.clone();
+    std::thread::spawn(move || {
+        if let Err(e) = portal::listen(portal_tx) {
+            log::error!("Portal listener died: {}", e);
+        }
+    });
+
+    // Spawn the Control Loop
+    let app_instance = sync_app.clone();
+    std::thread::spawn(move || {
+        for msg in control_rx {
+            match msg {
+                app::ControlMsg::TriggerSync => {
+                    if let Some(rgb) = portal::get_current_accent_color() {
+                        app_instance.update(rgb);
+                    }
+                }
+                app::ControlMsg::UpdateColor(rgb) => {
+                    app_instance.update(rgb);
+                }
+            }
+        }
+    });
+
+    // Trigger initial sync
+    let _ = control_tx.send(app::ControlMsg::TriggerSync);
 
     log::info!("Aura Accent Sync is running. Waiting for XDG portal events...");
 
-    // Application runs until terminated by systemd
+    // Application runs until terminated by systemd or tray closed
     let _ = tray_handle.join();
-    log::info!("Aura Accent Sync stopped by systemd");
+    log::info!("Aura Accent Sync stopped");
     Ok(())
 }
