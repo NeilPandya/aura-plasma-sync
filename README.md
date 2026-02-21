@@ -130,7 +130,7 @@ error while loading shared libraries: libxdo.so.3: cannot open shared object fil
 
 This typically happens when the system library `libxdo` has been updated. To fix this:
 
-1. **Rebuild the application** (recommended):
+  1. **Rebuild the application** (recommended):
    ```bash
    cargo clean
    cargo install --path .
@@ -142,24 +142,25 @@ This typically happens when the system library `libxdo` has been updated. To fix
    ./target/release/aura-accent-sync install
    ```
 
-2. **Install the missing library**:
+  2. **Install the missing library**:
+  
   e.g.,
 
-```bash
-sudo apt-get install libxdo-dev
-``` 
+   ```bash
+   sudo apt-get install libxdo-dev
+   ``` 
 
-or
+   or
 
-```fish
-paru -S xdotool  # On Arch/CachyOS
-```
+   ```fish
+   paru -S xdotool  # On Arch/CachyOS
+   ```
  
-or
+   or
  
-```fish
-sudo pacman -S xdotool  # On Arch/CachyOS
-```
+   ```fish
+   sudo pacman -S xdotool  # On Arch/CachyOS
+   ```
 
 This issue occurs because the binary was compiled against a specific version of system libraries that may have been updated by your package manager.
 
