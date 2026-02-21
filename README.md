@@ -157,7 +157,7 @@ paru -S xdotool  # On Arch/CachyOS
  
 or
  
-```sh
+```fish
 sudo pacman -S xdotool  # On Arch/CachyOS
 ```
 
