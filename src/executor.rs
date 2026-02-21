@@ -19,15 +19,17 @@ pub fn sync_colors(rgb: [u8; 3]) -> Result<()> {
 
 /// Execute the aura static effect command
 fn execute_aura_static_effect(hex: &str) -> Result<()> {
-    let status = Command::new("asusctl")
+    let output = Command::new("asusctl")
         .args(["aura", "effect", "static", "-c", hex])
-        .status()
+        .output()
         .context("Failed to execute asusctl color command")?;
 
-    if !status.success() {
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
         bail!(
-            "asusctl color command failed with exit code {:?}",
-            status.code().unwrap_or(1)
+            "asusctl color command failed ({:?}): {}",
+            output.status.code().unwrap_or(1),
+            stderr.trim()
         );
     }
     Ok(())
