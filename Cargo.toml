@@ -1,10 +1,17 @@
 [package]
 name = "aura-accent-sync"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 authors = ["Neil Pandya <dev@neilpandya.com>"]
 description = "A utility to sync Asus Aura lighting with your XDG-compatible desktop environment's accent color."
 license = "GPL-3.0-or-later"
+
+[profile.release]
+opt-level = "z"      # Optimize for size
+lto = true           # Link Time Optimization
+codegen-units = 1    # Better optimization at the cost of compile time
+panic = "abort"      # Remove panic unwinding code
+strip = true         # Strip symbols from binary
 
 [dependencies]
 # System UI components
