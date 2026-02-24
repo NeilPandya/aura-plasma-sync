@@ -1,7 +1,5 @@
 // src/color.rs
-// Provides a centralized library of color parsing, image buffer creation, and string formatting utilities.
-
-use image::{ImageBuffer, Rgba};
+// Provides a centralized library of color parsing and data transformations.
 
 /// Converts normalized F64 RGB values (0.0-1.0) from XDG Portal to u8 bytes
 pub fn from_f64_rgb(r: f64, g: f64, b: f64) -> [u8; 3] {
@@ -25,14 +23,4 @@ pub fn format_rgb_string(rgb: [u8; 3]) -> String {
 /// Formats hex string for display in tray menu
 pub fn format_hex_string(rgb: [u8; 3]) -> String {
     format!("HEX: #{}", to_hex_string(rgb))
-}
-
-/// Creates a solid color icon for the tray
-pub fn create_color_icon(rgb: [u8; 3]) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-    let mut img = ImageBuffer::new(16, 16);
-    let color = Rgba([rgb[0], rgb[1], rgb[2], 255]);
-    for pixel in img.pixels_mut() {
-        *pixel = color;
-    }
-    img
 }
