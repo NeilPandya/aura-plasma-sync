@@ -1,7 +1,9 @@
 // src/tray.rs
 // Manages the system tray UI thread efficiently using event-driven updates.
 
+use gtk::gdk_pixbuf::{self, Pixbuf};
 use gtk::glib;
+use gtk::prelude::*;
 use std::cell::RefCell;
 use std::sync::mpsc;
 use std::thread;
@@ -25,7 +27,6 @@ impl TraySender {
     pub fn send(&self, rgb: [u8; 3]) {
         if self.tx.send(rgb).is_ok() {
             // Schedule a ONE-OFF execution on the GTK thread.
-            // This wakes the thread up, runs the closure once, then lets it sleep.
             glib::idle_add_once(move || {
                 TRAY_RX.with(|rx_cell| {
                     if let Some(rx) = rx_cell.borrow().as_ref() {
@@ -44,11 +45,11 @@ impl TraySender {
     }
 }
 
+/// Orchestrates the UI updates within the GTK thread.
 fn update_ui(rgb: [u8; 3]) {
     TRAY_STATE.with(|state_cell| {
         if let Some((tray, hex_item, rgb_item)) = state_cell.borrow_mut().as_mut() {
-            let img = crate::color::create_color_icon(rgb);
-            let buf = img.into_vec();
+            let buf = create_themed_icon_buffer(rgb);
             if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, 16, 16) {
                 let _ = tray.set_icon(Some(rgba_icon));
             }
@@ -56,6 +57,53 @@ fn update_ui(rgb: [u8; 3]) {
             rgb_item.set_text(&crate::color::format_rgb_string(rgb));
         }
     });
+}
+
+/// Private helper to generate the UI asset.
+fn create_themed_icon_buffer(rgb: [u8; 3]) -> Vec<u8> {
+    let theme = gtk::IconTheme::default().expect("GTK not initialized");
+    let icon_names = [
+        "preferences-color-symbolic",
+        "preferences-color",
+        "preferences-display-color",
+    ];
+
+    let mut icon_info = None;
+    for name in icon_names {
+        if let Some(info) = theme.lookup_icon(name, 16, gtk::IconLookupFlags::FORCE_SYMBOLIC) {
+            icon_info = Some(info);
+            break;
+        }
+    }
+
+    let pixbuf = icon_info
+        .and_then(|info| info.load_icon().ok())
+        .unwrap_or_else(|| {
+            let pb = Pixbuf::new(gdk_pixbuf::Colorspace::Rgb, true, 8, 16, 16).unwrap();
+            pb.fill(0x00000000);
+            pb
+        });
+
+    let scaled = if pixbuf.width() != 16 || pixbuf.height() != 16 {
+        pixbuf
+            .scale_simple(16, 16, gdk_pixbuf::InterpType::Bilinear)
+            .unwrap()
+    } else {
+        pixbuf
+    };
+
+    let pixel_bytes = scaled.read_pixel_bytes();
+    let pixels = pixel_bytes.as_ref();
+    let mut tinted_data = Vec::with_capacity(pixels.len());
+
+    for chunk in pixels.chunks_exact(4) {
+        tinted_data.push(rgb[0]);
+        tinted_data.push(rgb[1]);
+        tinted_data.push(rgb[2]);
+        tinted_data.push(chunk[3]); // Preserve alpha
+    }
+
+    tinted_data
 }
 
 pub fn spawn_tray() -> (TraySender, thread::JoinHandle<()>) {
