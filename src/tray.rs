@@ -12,6 +12,8 @@ use tray_icon::{
     menu::{Menu, MenuItem},
 };
 
+const TRAY_ICON_SIZE: i32 = 64;
+
 // Thread-local storage to hold UI handles safely within the GTK thread.
 thread_local! {
     static TRAY_STATE: RefCell<Option<(TrayIcon, MenuItem, MenuItem)>> = const { RefCell::new(None) };
@@ -50,27 +52,37 @@ fn update_ui(rgb: [u8; 3]) {
     TRAY_STATE.with(|state_cell| {
         if let Some((tray, hex_item, rgb_item)) = state_cell.borrow_mut().as_mut() {
             let buf = create_themed_icon_buffer(rgb);
-            if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, 16, 16) {
+
+            // We cast to u32 here as tray-icon's API expects u32 dimensions
+            let icon_res = TRAY_ICON_SIZE as u32;
+
+            if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, icon_res, icon_res) {
                 let _ = tray.set_icon(Some(rgba_icon));
             }
+
             hex_item.set_text(&crate::color::format_hex_string(rgb));
             rgb_item.set_text(&crate::color::format_rgb_string(rgb));
         }
     });
 }
 
-/// Private helper to generate the UI asset.
 fn create_themed_icon_buffer(rgb: [u8; 3]) -> Vec<u8> {
     let theme = gtk::IconTheme::default().expect("GTK not initialized");
+
+    // We try to find the best symbolic icon available in the system theme
     let icon_names = [
         "preferences-color-symbolic",
+        "preferences-desktop-color-symbolic",
         "preferences-color",
-        "preferences-display-color",
     ];
 
     let mut icon_info = None;
     for name in icon_names {
-        if let Some(info) = theme.lookup_icon(name, 16, gtk::IconLookupFlags::FORCE_SYMBOLIC) {
+        // We request the icon at our high-res constant.
+        // GTK will handle the SVG -> Raster conversion at this resolution.
+        if let Some(info) =
+            theme.lookup_icon(name, TRAY_ICON_SIZE, gtk::IconLookupFlags::FORCE_SYMBOLIC)
+        {
             icon_info = Some(info);
             break;
         }
@@ -79,28 +91,42 @@ fn create_themed_icon_buffer(rgb: [u8; 3]) -> Vec<u8> {
     let pixbuf = icon_info
         .and_then(|info| info.load_icon().ok())
         .unwrap_or_else(|| {
-            let pb = Pixbuf::new(gdk_pixbuf::Colorspace::Rgb, true, 8, 16, 16).unwrap();
-            pb.fill(0x00000000);
-            pb
+            // Fallback: Transparent square if no icon found
+            Pixbuf::new(
+                gdk_pixbuf::Colorspace::Rgb,
+                true,
+                8,
+                TRAY_ICON_SIZE,
+                TRAY_ICON_SIZE,
+            )
+            .unwrap()
         });
 
-    let scaled = if pixbuf.width() != 16 || pixbuf.height() != 16 {
+    // Final safety check: if the theme returned a different size than requested, scale it.
+    let scaled = if pixbuf.width() != TRAY_ICON_SIZE || pixbuf.height() != TRAY_ICON_SIZE {
         pixbuf
-            .scale_simple(16, 16, gdk_pixbuf::InterpType::Bilinear)
+            .scale_simple(
+                TRAY_ICON_SIZE,
+                TRAY_ICON_SIZE,
+                gdk_pixbuf::InterpType::Bilinear,
+            )
             .unwrap()
     } else {
         pixbuf
     };
 
-    let pixel_bytes = scaled.read_pixel_bytes();
-    let pixels = pixel_bytes.as_ref();
-    let mut tinted_data = Vec::with_capacity(pixels.len());
+    let pixels = scaled.read_pixel_bytes();
+    let pixels_ref = pixels.as_ref();
 
-    for chunk in pixels.chunks_exact(4) {
-        tinted_data.push(rgb[0]);
-        tinted_data.push(rgb[1]);
-        tinted_data.push(rgb[2]);
-        tinted_data.push(chunk[3]); // Preserve alpha
+    // Optimization: Pre-allocate the exact size needed (Width * Height * RGBA)
+    let mut tinted_data = Vec::with_capacity(pixels_ref.len());
+
+    for chunk in pixels_ref.chunks_exact(4) {
+        // We replace the RGB channels with our accent color,
+        // but we MUST keep the Alpha channel from the symbolic icon.
+        tinted_data.extend_from_slice(&[
+            rgb[0], rgb[1], rgb[2], chunk[3], // The "shape" of the icon
+        ]);
     }
 
     tinted_data
@@ -123,7 +149,7 @@ pub fn spawn_tray() -> (TraySender, thread::JoinHandle<()>) {
         let _ = menu.append(&rgb_item);
 
         let tray = TrayIconBuilder::new()
-            .with_tooltip("Aura XDG-Accent Sync")
+            .with_tooltip("Aura Accent Sync")
             .with_menu(Box::new(menu))
             .build()
             .expect("Failed to build tray icon");
