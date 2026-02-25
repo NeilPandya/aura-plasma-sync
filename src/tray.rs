@@ -138,9 +138,17 @@ pub fn spawn_tray() -> (TraySender, thread::JoinHandle<()>) {
             return;
         }
 
+        // Create the title item (disabled so it isn't clickable)
+        let title_item = MenuItem::new("Aura Accent Sync", false, None);
+        // Create a separator for visual clarity
+        let separator = tray_icon::menu::PredefinedMenuItem::separator();
+
         let hex_item = MenuItem::new("HEX: #------", false, None);
         let rgb_item = MenuItem::new("RGB: ---,---,---", false, None);
+
         let menu = Menu::new();
+        let _ = menu.append(&title_item);
+        let _ = menu.append(&separator);
         let _ = menu.append(&hex_item);
         let _ = menu.append(&rgb_item);
 
@@ -150,7 +158,7 @@ pub fn spawn_tray() -> (TraySender, thread::JoinHandle<()>) {
             .build()
             .expect("Failed to build tray icon");
 
-        // Initialize thread-local state
+        // Initialize thread-local state (no need to store title_item as it never changes)
         TRAY_STATE.with(|s| *s.borrow_mut() = Some((tray, hex_item, rgb_item)));
         TRAY_RX.with(|r| *r.borrow_mut() = Some(rx));
 
