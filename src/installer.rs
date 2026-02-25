@@ -35,13 +35,14 @@ fn systemctl_user(args: &[&str]) -> Result<()> {
     }
 }
 
-// Helper: generate systemd service file content
+// Generate systemd service file content
 fn generate_service_content(exec_start: &str) -> String {
     format!(
         "[Unit]\nDescription=Aura XDG Accent Color Sync\n\
         After=graphical-session.target\n\
         PartOf=graphical-session.target\n\n\
-        [Service]\nExecStart={}\nRestart=always\nRestartSec=5\n\n\
+        [Service]\nExecStart={}\nRestart=always\nRestartSec=5\n\
+        Environment=XDG_DATA_DIRS=%h/.local/share:/usr/local/share:/usr/share\n\n\
         [Install]\nWantedBy=graphical-session.target",
         exec_start
     )
