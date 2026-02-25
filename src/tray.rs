@@ -1,5 +1,5 @@
 // src/tray.rs
-// Manages the system tray UI thread efficiently using event-driven updates.
+// Manages the system tray UI thread using event-driven updates.
 
 use gtk::gdk_pixbuf::{self, Pixbuf};
 use gtk::glib;
@@ -28,7 +28,7 @@ pub struct TraySender {
 impl TraySender {
     pub fn send(&self, rgb: [u8; 3]) {
         if self.tx.send(rgb).is_ok() {
-            // Schedule a ONE-OFF execution on the GTK thread.
+            // Schedule a one-off execution on the GTK thread.
             glib::idle_add_once(move || {
                 TRAY_RX.with(|rx_cell| {
                     if let Some(rx) = rx_cell.borrow().as_ref() {
@@ -47,15 +47,15 @@ impl TraySender {
     }
 }
 
-/// Orchestrates the UI updates within the GTK thread.
+/// Orchestrate the UI updates within the GTK thread.
 fn update_ui(rgb: [u8; 3]) {
     TRAY_STATE.with(|state_cell| {
         if let Some((tray, hex_item, rgb_item)) = state_cell.borrow_mut().as_mut() {
             let buf = create_themed_icon_buffer(rgb);
-
-            // We cast to u32 here as tray-icon's API expects u32 dimensions
             let icon_res = TRAY_ICON_SIZE as u32;
 
+            // Providing a 32x32 buffer allows the system to downscale cleanly if needed,
+            // preventing the fuzziness seen with 16x16.
             if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, icon_res, icon_res) {
                 let _ = tray.set_icon(Some(rgba_icon));
             }
@@ -69,17 +69,16 @@ fn update_ui(rgb: [u8; 3]) {
 fn create_themed_icon_buffer(rgb: [u8; 3]) -> Vec<u8> {
     let theme = gtk::IconTheme::default().expect("GTK not initialized");
 
-    // We try to find the best symbolic icon available in the system theme
     let icon_names = [
-        "preferences-color-symbolic",
-        "preferences-desktop-color-symbolic",
         "preferences-color",
+        "preferences-theme",
+        "colormanagement",
+        "color-profile",
+        "preferences-desktop-color",
     ];
 
     let mut icon_info = None;
     for name in icon_names {
-        // We request the icon at our high-res constant.
-        // GTK will handle the SVG -> Raster conversion at this resolution.
         if let Some(info) =
             theme.lookup_icon(name, TRAY_ICON_SIZE, gtk::IconLookupFlags::FORCE_SYMBOLIC)
         {
@@ -91,24 +90,26 @@ fn create_themed_icon_buffer(rgb: [u8; 3]) -> Vec<u8> {
     let pixbuf = icon_info
         .and_then(|info| info.load_icon().ok())
         .unwrap_or_else(|| {
-            // Fallback: Transparent square if no icon found
-            Pixbuf::new(
+            // Fallback: create a solid square.
+            let pb = Pixbuf::new(
                 gdk_pixbuf::Colorspace::Rgb,
                 true,
                 8,
                 TRAY_ICON_SIZE,
                 TRAY_ICON_SIZE,
             )
-            .unwrap()
+            .unwrap();
+            pb.fill(0xffffffff);
+            pb
         });
 
-    // Final safety check: if the theme returned a different size than requested, scale it.
+    // High-quality scaling if the theme provides a size mismatch
     let scaled = if pixbuf.width() != TRAY_ICON_SIZE || pixbuf.height() != TRAY_ICON_SIZE {
         pixbuf
             .scale_simple(
                 TRAY_ICON_SIZE,
                 TRAY_ICON_SIZE,
-                gdk_pixbuf::InterpType::Bilinear,
+                gdk_pixbuf::InterpType::Hyper, // Use highest quality interpolation
             )
             .unwrap()
     } else {
@@ -117,16 +118,11 @@ fn create_themed_icon_buffer(rgb: [u8; 3]) -> Vec<u8> {
 
     let pixels = scaled.read_pixel_bytes();
     let pixels_ref = pixels.as_ref();
-
-    // Optimization: Pre-allocate the exact size needed (Width * Height * RGBA)
     let mut tinted_data = Vec::with_capacity(pixels_ref.len());
 
     for chunk in pixels_ref.chunks_exact(4) {
-        // We replace the RGB channels with our accent color,
-        // but we MUST keep the Alpha channel from the symbolic icon.
-        tinted_data.extend_from_slice(&[
-            rgb[0], rgb[1], rgb[2], chunk[3], // The "shape" of the icon
-        ]);
+        // Tint the icon with the accent color while preserving the original alpha
+        tinted_data.extend_from_slice(&[rgb[0], rgb[1], rgb[2], chunk[3]]);
     }
 
     tinted_data
