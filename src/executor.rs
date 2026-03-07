@@ -15,9 +15,7 @@ pub fn sync_colors(rgb: [u8; 3]) -> Result<()> {
     Ok(())
 }
 
-// Private implementation details: helpers first, then orchestrator
-
-/// Execute the aura static effect command
+// Execute the aura static effect command
 fn execute_aura_static_effect(hex: &str) -> Result<()> {
     let output = Command::new("asusctl")
         .args(["aura", "effect", "static", "-c", hex])
@@ -35,7 +33,7 @@ fn execute_aura_static_effect(hex: &str) -> Result<()> {
     Ok(())
 }
 
-/// This ensures the brightness is set back even if the main operation fails.
+// This ensures the brightness is set back even if the main operation fails.
 struct BrightnessGuard {
     level: u8,
 }
