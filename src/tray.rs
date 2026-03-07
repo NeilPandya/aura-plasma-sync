@@ -47,15 +47,17 @@ impl TraySender {
     }
 }
 
-/// Orchestrate the UI updates within the GTK thread.
+// Orchestrate the UI updates within the GTK thread.
 fn update_ui(rgb: [u8; 3]) {
     TRAY_STATE.with(|state_cell| {
         if let Some((tray, hex_item, rgb_item)) = state_cell.borrow_mut().as_mut() {
             let buf = create_themed_icon_buffer(rgb);
             let icon_res = TRAY_ICON_SIZE as u32;
 
-            // Providing a 32x32 buffer allows the system to downscale cleanly if needed,
-            // preventing the fuzziness seen with 16x16.
+            /*
+             * Providing a 32x32 buffer allows the system to downscale cleanly if needed,
+             * preventing the fuzziness seen with 16x16.
+             */
             if let Ok(rgba_icon) = tray_icon::Icon::from_rgba(buf, icon_res, icon_res) {
                 let _ = tray.set_icon(Some(rgba_icon));
             }
