@@ -49,7 +49,7 @@ fn generate_service_content(exec_start: &str) -> String {
 }
 
 // Helper: ensure parent directory exists
-fn ensure_parent_dir_exists(path: &PathBuf) -> Result<()> {
+fn check_parent_dir_exists(path: &PathBuf) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("Failed to create directory: {:?}", parent))?;
@@ -64,7 +64,7 @@ pub fn install() -> Result<()> {
 
     let content = generate_service_content(&current_exe.display().to_string());
 
-    ensure_parent_dir_exists(&service_path)?;
+    check_parent_dir_exists(&service_path)?;
     fs::write(&service_path, content)?;
 
     systemctl_user(&["daemon-reload"])?;
