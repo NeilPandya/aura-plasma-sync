@@ -1,44 +1,27 @@
 // src/env.rs
 // Validates system environment requirements and verifies asusctl availability on startup.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, bail};
 use std::process::Command;
 
-// Public API
+/// Validates that asusctl is installed and reachable
 pub fn validate_dependencies() -> Result<()> {
-    validate_asusctl_connection().map_err(|e| {
-        anyhow!(
-            "Could not connect to asusctl: {}. \
-            Ensure asusctl is installed and running.",
-            e
-        )
-    })
-}
-
-// Private implementation details: helpers first, then orchestrator
-
-// Test the asusctl connection by querying device info
-fn test_asusctl_connection() -> Result<()> {
     let output = Command::new("asusctl")
         .arg("info")
         .output()
-        .context("Failed to execute asusctl info command")?;
+        .context("Could not execute 'asusctl'. Ensure it is installed and in your PATH.")?;
 
     if !output.status.success() {
-        return Err(anyhow!(
-            "asusctl info returned non-zero exit code: {:?}",
-            output.status.code().unwrap_or(1)
-        ));
+        bail!("'asusctl info' returned an error. Ensure the asusd daemon is running.");
     }
 
     log::info!(
-        "asusctl info: {}",
-        String::from_utf8_lossy(&output.stdout).trim()
+        "asusctl connected: {}",
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .next()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("(no output)")
     );
     Ok(())
-}
-
-// Validate asusctl connection
-fn validate_asusctl_connection() -> Result<()> {
-    test_asusctl_connection()
 }
