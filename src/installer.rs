@@ -48,29 +48,22 @@ fn generate_service_content(exec_start: &str) -> String {
     )
 }
 
-// Helper: ensure parent directory exists
-fn check_parent_dir_exists(path: &PathBuf) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory: {:?}", parent))?;
-    }
-    Ok(())
-}
-
 // Public API: install the service
 pub fn install() -> Result<()> {
     let service_path = get_service_path()?;
     let current_exe = std::env::current_exe()?;
-
     let content = generate_service_content(&current_exe.display().to_string());
 
-    check_parent_dir_exists(&service_path)?;
-    fs::write(&service_path, content)?;
+    if let Some(parent) = service_path.parent() {
+        fs::create_dir_all(parent).context("Failed to create systemd config directory")?;
+    }
+
+    fs::write(&service_path, content).context("Failed to write service file")?;
 
     systemctl_user(&["daemon-reload"])?;
     systemctl_user(&["enable", "--now", SERVICE_NAME])?;
 
-    log::info!("Service installed.");
+    log::info!("Service installed at {:?}", service_path);
     Ok(())
 }
 
