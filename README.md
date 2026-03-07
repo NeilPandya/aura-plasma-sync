@@ -6,6 +6,8 @@ A lightweight utility that synchronizes **Asus Aura** lighting with your desktop
 
 ## Table of Contents
 - [Features](#features)
+- [Use Cases](#use-cases)
+- [Application Architecture](#application-architecture)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
   - [Systemd Service (Recommended)](#systemd-service-recommended)
@@ -21,6 +23,14 @@ A lightweight utility that synchronizes **Asus Aura** lighting with your desktop
 
 ---
 
+## Use Cases
+
+- **Wallpaper-Synced Theming**: Automatically sync Aura lighting when you change your desktop wallpaper using tools like `wpgtk` or `pywal`
+- **Time-Based Themes**: Keep Aura lighting in sync with dynamic DE themes (e.g., light/dark mode transitions)
+- **Manual Accent Color Customization**: Instantly reflect any manual accent color changes to your hardware
+
+---
+
 ## Features
 - **Pure XDG Compliance**: Uses only the `org.freedesktop.portal.Settings` interface for accent color detection
 - **Real-time Updates**: Listens for `SettingChanged` signals for instant color synchronization
@@ -32,6 +42,104 @@ A lightweight utility that synchronizes **Asus Aura** lighting with your desktop
   - And any other DE that implements the XDG Settings Portal
 - **Systemd Integration**: Includes an installer for persistent background service
 - **Tray Integration**: Provides a system tray icon with a color preview
+
+---
+
+## Application Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Installation & Startup                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  cargo install --path .                                         │
+│           |                                                     │
+│           v                                                     │
+│  aura-accent-sync install                                       │
+│           |                                                     │
+│           +---> Write systemd service file                      │
+│           |     ~/.config/systemd/user/                         │
+│           |     aura-accent-sync.service                        │
+│           |                                                     │
+│           +---> systemctl daemon-reload                         │
+│           |                                                     │
+│           v                                                     │
+│  systemctl --user enable --now aura-accent-sync                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                           |
+                           v
+┌─────────────────────────────────────────────────────────────────┐
+│                    Runtime Initialization                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  validate_dependencies()                                        │
+│           |                                                     │
+│           +---> asusctl info (verify daemon running)            │
+│           |                                                     │
+│           v                                                     │
+│  Spawn Portal Listener Thread                                   │
+│  Spawn Control Loop Thread                                      │
+│  Spawn Tray UI Thread (GTK)                                     │
+│           |                                                     │
+│           v                                                     │
+│  Send initial TriggerSync                                       │
+│           |                                                     │
+│           v                                                     │
+│  Ready: Listening for XDG Portal events                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                           |
+                           v
+┌─────────────────────────────────────────────────────────────────┐
+│              Event Loop: Accent Color Change                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Portal Listener Thread                                         │
+│  ├─ Monitor XDG Settings DBus interface                         │
+│  ├─ Receive SettingChanged signal                               │
+│  └─ Extract RGB from accent-color property                      │
+│           |                                                     │
+│           v                                                     │
+│  parse_rgb_value(value)                                         │
+│  ├─ Unwrap Value wrappers                                       │
+│  ├─ Extract F64 triple                                          │
+│  └─ Call color::from_f64_rgb() → Option<[u8; 3]>                │
+│           |                                                     │
+│           v                                                     │
+│  Send ControlMsg::UpdateColor(rgb) to channel                   │
+│           |                                                     │
+│           v                                                     │
+│  Control Loop Thread (receives from channel)                    │
+│  ├─ Match msg type                                              │
+│  ├─ Check de-duplication (last_color)                           │
+│  └─ Call AuraSync::update(rgb)                                  │
+│           |                                                     │
+│           +---> executor::sync_colors(rgb)                      │
+│           |     ├─ Query current brightness                     │
+│           |     ├─ Run: asusctl aura effect static -c <hex>     │
+│           |     └─ Restore brightness with asusctl leds set     │
+│           |                                                     │
+│           +---> tray_sender.send(rgb)                           │
+│                 ├─ Lock TRAY_COLOR Mutex                        │
+│                 ├─ Update to latest RGB                         │
+│                 └─ Schedule GTK idle callback                   │
+│                           |                                     │
+│                           v                                     │
+│                 Tray UI Thread (GTK main loop)                  │
+│                 ├─ Lock TRAY_COLOR Mutex (read)                 │
+│                 ├─ Access ICON_TEMPLATE (thread-local)          │
+│                 ├─ Tint cached pixbuf with RGB                  │
+│                 ├─ Update hex_item text                         │
+│                 ├─ Update rgb_item text                         │
+│                 └─ Set tray icon                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                           |
+                           v
+                   (Loop back to listen)
+                   for next color change
+```
 
 ---
 
