@@ -13,7 +13,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::sync::mpsc;
 
-/// Command-line interface definition for Aura Accent Sync
+// Command-line interface definition for Aura Accent Sync
 #[derive(Parser)]
 #[command(author, version, about)]
 struct Cli {
@@ -21,12 +21,12 @@ struct Cli {
     command: Option<Commands>,
 }
 
-/// Available subcommands for Aura Accent Sync
+// Available subcommands for Aura Accent Sync
 #[derive(Subcommand)]
 enum Commands {
-    /// Install as systemd service
+    // Install as systemd service
     Install,
-    /// Uninstall systemd service
+    // Uninstall systemd service
     Uninstall,
 }
 
@@ -41,7 +41,7 @@ fn main() -> Result<()> {
     }
 }
 
-/// Runs the main application after environment validation
+// Runs the main application after environment validation
 fn run_application() -> Result<()> {
     // Validate environment dependencies before starting
     env::validate_dependencies()?;
