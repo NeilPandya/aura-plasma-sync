@@ -53,7 +53,7 @@ fn run_application() -> Result<()> {
     let (tray_sender, tray_handle) = tray::spawn_tray();
 
     // Create the application state
-    let sync_app = std::sync::Arc::new(app::AuraSync::new(Some(tray_sender)));
+    let sync_app = app::AuraSync::new(Some(tray_sender));
 
     // Spawn the Portal Listener
     let portal_tx = control_tx.clone();
@@ -64,18 +64,15 @@ fn run_application() -> Result<()> {
     });
 
     // Spawn the Control Loop
-    let app_instance = sync_app.clone();
     std::thread::spawn(move || {
         for msg in control_rx {
-            match msg {
-                app::ControlMsg::TriggerSync => {
-                    if let Some(rgb) = portal::get_current_accent_color() {
-                        app_instance.update(rgb);
-                    }
-                }
-                app::ControlMsg::UpdateColor(rgb) => {
-                    app_instance.update(rgb);
-                }
+            let color = match msg {
+                app::ControlMsg::UpdateColor(rgb) => Some(rgb),
+                app::ControlMsg::TriggerSync => portal::get_current_accent_color(),
+            };
+
+            if let Some(rgb) = color {
+                sync_app.update(rgb);
             }
         }
     });
