@@ -1,6 +1,6 @@
 [package]
 name = "aura-accent-sync"
-version = "0.5.5"
+version = "0.6.0"
 edition = "2024"
 authors = ["Neil Pandya <dev@neilpandya.com>"]
 description = "A utility to sync Asus Aura lighting with your XDG-compatible desktop environment's accent color."
@@ -25,7 +25,6 @@ zbus = { version = "5.13.2", features = ["blocking"] }
 anyhow = "1.0.95"
 log = "0.4.29"
 env_logger = "0.11.8"
-image = "0.25.9"
 
 # CLI
 clap = { version = "4.5.57", features = ["derive"] }
