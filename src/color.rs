@@ -2,12 +2,16 @@
 // Provides a centralized library of color parsing and data transformations.
 
 // Converts normalized F64 RGB values (0.0-1.0) from XDG Portal to u8 bytes
-pub fn from_f64_rgb(r: f64, g: f64, b: f64) -> [u8; 3] {
-    [
-        (r * 255.0).round() as u8,
-        (g * 255.0).round() as u8,
-        (b * 255.0).round() as u8,
-    ]
+pub fn from_f64_rgb(r: f64, g: f64, b: f64) -> Option<[u8; 3]> {
+    if (0.0..=1.0).contains(&r) && (0.0..=1.0).contains(&g) && (0.0..=1.0).contains(&b) {
+        Some([
+            (r * 255.0).round() as u8,
+            (g * 255.0).round() as u8,
+            (b * 255.0).round() as u8,
+        ])
+    } else {
+        None
+    }
 }
 
 // Formats RGB array to hex string (without #)
