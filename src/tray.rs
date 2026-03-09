@@ -1,6 +1,8 @@
 // src/tray.rs
 // Manages the system tray UI thread using event-driven updates.
 
+use crate::color;
+
 use gtk::gdk_pixbuf::{self, Pixbuf};
 use gtk::glib;
 use gtk::prelude::*;
@@ -55,8 +57,8 @@ fn update_ui(rgb: [u8; 3]) {
                 }
             });
 
-            hex_item.set_text(&crate::color::format_hex_string(rgb));
-            rgb_item.set_text(&crate::color::format_rgb_string(rgb));
+            hex_item.set_text(&color::format_hex_string(rgb));
+            rgb_item.set_text(&color::format_rgb_string(rgb));
         }
     });
 }
