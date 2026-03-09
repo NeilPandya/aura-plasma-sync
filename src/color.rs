@@ -2,7 +2,6 @@
 // Provides a centralized library of color parsing and data transformations.
 
 /// Converts normalized F64 RGB values (0.0-1.0) to u8 bytes.
-/// Returns `None` if any component is out of range.
 pub fn from_f64_rgb(r: f64, g: f64, b: f64) -> Option<[u8; 3]> {
     if (0.0..=1.0).contains(&r) && (0.0..=1.0).contains(&g) && (0.0..=1.0).contains(&b) {
         Some([
