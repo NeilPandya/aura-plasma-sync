@@ -170,7 +170,7 @@ Required Rust crates:
 The project ships an installer that creates a **user‑level systemd service** pointing to the binary you just built.
 
 ```bash
-git clone https://github.com/neilpandya/aura-accent-sync
+git clone https://codeberg.org/NeilPandya/aura-accent-sync.git
 cd aura-accent-sync
 cargo install --path .
 aura-accent-sync install
