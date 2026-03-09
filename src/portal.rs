@@ -6,6 +6,9 @@ use anyhow::{Context, Result};
 use std::sync::{OnceLock, mpsc::Sender};
 use zbus::zvariant::Value;
 
+/// Global connection cache for DBus session
+static DBUS_CONNECTION: OnceLock<zbus::blocking::Connection> = OnceLock::new();
+
 #[zbus::proxy(
     interface = "org.freedesktop.portal.Settings",
     default_service = "org.freedesktop.portal.Desktop",
@@ -18,8 +21,8 @@ trait Settings {
     fn read(&self, namespace: &str, key: &str) -> zbus::Result<zbus::zvariant::OwnedValue>;
 }
 
-// Parses an XDG Portal color value and converts it to RGB bytes.
-// Returns `None` if the value is invalid or out of range.
+/// Parse DBus value and convert to RGB.
+/// Handles the specific nesting of the XDG Portal data structure.
 fn parse_rgb_value(value: &Value) -> Option<[u8; 3]> {
     let mut inner = value;
     while let Value::Value(v) = inner {
@@ -37,10 +40,7 @@ fn parse_rgb_value(value: &Value) -> Option<[u8; 3]> {
     None
 }
 
-// Global connection cache for DBus session
-static DBUS_CONNECTION: OnceLock<zbus::blocking::Connection> = OnceLock::new();
-
-// Connection management
+/// Connection management: Singleton access to the DBus session
 fn get_dbus_connection() -> Result<&'static zbus::blocking::Connection> {
     if let Some(conn) = DBUS_CONNECTION.get() {
         return Ok(conn);
@@ -49,22 +49,18 @@ fn get_dbus_connection() -> Result<&'static zbus::blocking::Connection> {
     let conn = zbus::blocking::Connection::session()
         .context("Failed to establish DBus session connection")?;
 
-    // Use set() which returns an Err if another thread won the race
     let _ = DBUS_CONNECTION.set(conn);
-
-    // Return the value that is now guaranteed to be in the lock
     Ok(DBUS_CONNECTION.get().expect("OnceLock must be set"))
 }
 
-// Private helpers
+/// Private helper to generate the settings proxy
 fn create_settings_proxy(conn: &zbus::blocking::Connection) -> Result<SettingsProxyBlocking<'_>> {
     SettingsProxyBlocking::new(conn).with_context(|| "Failed to create Settings proxy")
 }
 
-// Public API: get current accent color
+/// Public API: get current accent color
 pub fn get_current_accent_color() -> Option<[u8; 3]> {
     let conn = get_dbus_connection().ok()?;
-
     let proxy = create_settings_proxy(conn).ok()?;
 
     let val = proxy
@@ -74,7 +70,7 @@ pub fn get_current_accent_color() -> Option<[u8; 3]> {
     parse_rgb_value(&val)
 }
 
-// Public API: listen for accent color changes
+/// Public API: listen for accent color changes
 pub fn listen(tx: Sender<ControlMsg>) -> Result<()> {
     let conn = get_dbus_connection()?;
     let proxy = create_settings_proxy(conn)?;
