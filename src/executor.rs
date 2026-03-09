@@ -4,19 +4,19 @@
 use anyhow::{Context, Result, bail};
 use std::process::Command;
 
-// Public API: sync colors to Aura devices
+/// Sync colors to Aura devices
 pub fn sync_colors(rgb: [u8; 3]) -> Result<()> {
     let hex = crate::color::to_hex_string(rgb);
 
-    // Capture current brightness (default to 'med' if reading fails)
-    let level = get_current_keyboard_brightness_level().unwrap_or(2);
+    // 1. Capture current brightness (default to "med" if reading fails)
+    let level = get_current_brightness_level().unwrap_or_else(|_| "med".to_string());
 
-    // Apply the color effect
+    // 2. Apply the color effect
     execute_aura_static_effect(&hex)?;
 
-    // Restore brightness level
+    // 3. Restore brightness level
     // Aura effect commands often reset the LED state to 'on' or 'max'
-    if let Err(e) = set_keyboard_brightness_level(level) {
+    if let Err(e) = set_brightness_level(&level) {
         log::warn!("Could not restore keyboard brightness: {}", e);
     }
 
@@ -24,7 +24,7 @@ pub fn sync_colors(rgb: [u8; 3]) -> Result<()> {
     Ok(())
 }
 
-// Execute the aura static effect command
+/// Execute the aura static effect command
 fn execute_aura_static_effect(hex: &str) -> Result<()> {
     let output = Command::new("asusctl")
         .args(["aura", "effect", "static", "-c", hex])
@@ -42,8 +42,8 @@ fn execute_aura_static_effect(hex: &str) -> Result<()> {
     Ok(())
 }
 
-// Get current keyboard brightness level (0=off, 1=low, 2=med, 3=high)
-fn get_current_keyboard_brightness_level() -> Result<u8> {
+/// Get current keyboard brightness level (off, low, med, high)
+fn get_current_brightness_level() -> Result<String> {
     let output = Command::new("asusctl")
         .args(["leds", "get"])
         .output()
@@ -56,44 +56,32 @@ fn get_current_keyboard_brightness_level() -> Result<u8> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let brightness_str = stdout.trim();
 
-    // Parse the level from output (e.g., "Keyboard brightness: Med")
-    let brightness_level = brightness_str
+    // Parse level from output (e.g., "Keyboard brightness: Med")
+    let level = brightness_str
         .split_once(':')
         .map(|(_, val)| val.trim())
-        .unwrap_or(brightness_str);
+        .unwrap_or(brightness_str)
+        .to_lowercase();
 
-    match brightness_level.to_lowercase().as_str() {
-        "off" => Ok(0),
-        "low" => Ok(1),
-        "med" => Ok(2),
-        "high" => Ok(3),
+    // Validate against known asusctl levels
+    match level.as_str() {
+        "off" | "low" | "med" | "high" => Ok(level),
         _ => {
-            log::warn!(
-                "Unknown brightness level '{}', defaulting to medium",
-                brightness_level
-            );
-            Ok(2)
+            log::warn!("Unknown brightness level '{}', defaulting to 'med'", level);
+            Ok("med".to_string())
         }
     }
 }
 
-// Set keyboard brightness level (0=off, 1=low, 2=med, 3=high)
-fn set_keyboard_brightness_level(level: u8) -> Result<()> {
-    let level_str = match level {
-        0 => "off",
-        1 => "low",
-        2 => "med",
-        3 => "high",
-        _ => "med",
-    };
-
+/// Set keyboard brightness level (off, low, med, high)
+fn set_brightness_level(level: &str) -> Result<()> {
     let status = Command::new("asusctl")
-        .args(["leds", "set", level_str])
+        .args(["leds", "set", level])
         .status()
         .context("Failed to execute asusctl leds set")?;
 
     if !status.success() {
-        bail!("asusctl leds set failed");
+        bail!("asusctl leds set failed for level: {}", level);
     }
 
     Ok(())
