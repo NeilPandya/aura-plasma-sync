@@ -23,7 +23,7 @@ impl AuraSync {
         }
     }
 
-    // Core update logic: check for color changes and sync hardware.
+    /// Core update logic: check for color changes and sync hardware.
     pub fn update(&self, rgb: [u8; 3]) {
         let mut last = self.last_color.lock().unwrap();
         if Some(rgb) == *last {
