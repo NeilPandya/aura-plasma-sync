@@ -8,7 +8,7 @@ use std::process::Command;
 
 const SERVICE_NAME: &str = "aura-accent-sync.service";
 
-// Service path construction
+/// Service path construction
 fn get_service_path() -> Result<PathBuf> {
     let config_dir = get_user_config_dir()?;
     Ok(config_dir.join("systemd/user").join(SERVICE_NAME))
@@ -35,7 +35,7 @@ fn systemctl_user(args: &[&str]) -> Result<()> {
     }
 }
 
-// Generate systemd service file content
+/// Generate systemd service file content
 fn generate_service_content(exec_start: &str) -> String {
     format!(
         "[Unit]\nDescription=Aura XDG Accent Color Sync\n\
@@ -48,7 +48,7 @@ fn generate_service_content(exec_start: &str) -> String {
     )
 }
 
-// Public API: install the service
+/// Install the service
 pub fn install() -> Result<()> {
     let service_path = get_service_path()?;
     let current_exe = std::env::current_exe()?;
@@ -67,7 +67,7 @@ pub fn install() -> Result<()> {
     Ok(())
 }
 
-// Public API: uninstall the service
+/// Uninstall the service
 pub fn uninstall() -> Result<()> {
     systemctl_user(&["stop", SERVICE_NAME])?;
     systemctl_user(&["disable", SERVICE_NAME])?;
